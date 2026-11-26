@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drill — practice without peeking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]'], ['$$', '$$']] },
+  svg: { fontCache: 'global' },
+  startup: { typeset: false }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js" async></script>
+<style>
+:root{
+  --bg:#EDF0F5; --surface:#FFFFFF; --sunk:#E2E7EF; --ink:#18202C; --muted:#5A6577; --line:#CBD3DF;
+  --pen:#2547A8; --pen-soft:#DCE4FA; --mark:#F3D54A; --ok:#227A49; --ok-soft:#DDF1E4; --bad:#B23A28; --bad-soft:#F8E0DB;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121722; --surface:#1B2230; --sunk:#242D3D; --ink:#E6EAF1; --muted:#9AA5B8; --line:#344055;
+    --pen:#93AEFF; --pen-soft:#25345C; --mark:#E8C93A; --ok:#5CCB8B; --ok-soft:#173A28; --bad:#F08A76; --bad-soft:#47221C;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121722; --surface:#1B2230; --sunk:#242D3D; --ink:#E6EAF1; --muted:#9AA5B8; --line:#344055;
+  --pen:#93AEFF; --pen-soft:#25345C; --mark:#E8C93A; --ok:#5CCB8B; --ok-soft:#173A28; --bad:#F08A76; --bad-soft:#47221C;
+  color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.55 var(--body);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--pen);outline-offset:2px}
+.wrap{max-width:46rem;margin:0 auto;padding:1.25rem 1rem 4rem}
+header.top{display:flex;align-items:center;gap:1rem;justify-content:space-between;padding:.25rem 0 1.25rem;flex-wrap:wrap}
+.brand{font:800 1.6rem/1 var(--display);letter-spacing:-.02em;display:flex;align-items:center;gap:.5rem;background:none;border:0;padding:0;cursor:pointer}
+.brand .dot{width:1.05rem;height:1.05rem;border-radius:50%;border:2.5px solid var(--ink);background:var(--mark);display:inline-block}
+nav.tabs{display:flex;gap:.25rem}
+.tab{border:0;background:none;padding:.45rem .8rem;border-radius:999px;cursor:pointer;color:var(--muted);font-weight:700}
+.tab[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.015em;margin:0}
+h1{font-size:clamp(1.7rem,4.5vw,2.3rem);line-height:1.1;font-weight:800}
+h2{font-size:1.25rem;font-weight:700}
+h3{font-size:1.05rem;font-weight:700}
+p{margin:.5rem 0}
+.muted{color:var(--muted)}
+.small{font-size:.875rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1.1rem 1.2rem}
+.stack>*+*{margin-top:1rem}
+.row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+.btn{border:1.5px solid var(--line);background:var(--surface);padding:.55rem 1rem;border-radius:10px;cursor:pointer;font-weight:700;line-height:1.2}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--pen);border-color:var(--pen);color:var(--surface)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+label.field{display:block;font-weight:700;font-size:.9rem}
+label.field>span{display:block;margin-bottom:.3rem}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg);border:1.5px solid var(--line);border-radius:9px;padding:.5rem .65rem}
+textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.82rem;line-height:1.45;min-height:12rem;resize:vertical}
+.check{display:flex;gap:.55rem;align-items:flex-start;cursor:pointer;padding:.2rem 0}
+.check input{margin-top:.3rem;accent-color:var(--pen);width:1rem;height:1rem}
+.seg{display:inline-flex;background:var(--sunk);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:.4rem .75rem;border-radius:8px;cursor:pointer;font-weight:700;color:var(--muted);font-size:.9rem}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 0 var(--line)}
+
+/* library */
+.hero{padding:.5rem 0 1.5rem}
+.hero p{max-width:36rem}
+.bank{display:grid;grid-template-columns:1fr auto;gap:.4rem 1rem;align-items:center}
+.bank+.bank{margin-top:.75rem}
+.bank .meta{font-size:.88rem;color:var(--muted)}
+.meter{height:6px;border-radius:3px;background:var(--sunk);overflow:hidden;margin-top:.45rem;max-width:14rem}
+.meter i{display:block;height:100%;background:var(--ok)}
+.empty{text-align:center;padding:2.2rem 1rem;border:2px dashed var(--line);border-radius:14px}
+
+/* quiz */
+.qhead{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.75rem}
+.qnum{font:800 1.05rem var(--display)}
+.progress{height:4px;background:var(--sunk);border-radius:2px;margin-bottom:1.2rem;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--pen);transition:width .25s}
+.passage{background:var(--sunk);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;font-size:.96rem;white-space:pre-wrap}
+.passage summary{cursor:pointer;font-weight:700;color:var(--muted);font-size:.85rem}
+.qimgs{display:grid;gap:.6rem;margin-bottom:1rem}
+.fig img{max-width:100%;height:auto;border-radius:8px;display:block}
+.fig-err.over{border-color:var(--pen);background:var(--pen-soft)}
+.fig-err:focus{outline:3px solid var(--pen);outline-offset:2px}
+.fig-steps{margin:.4rem 0 .3rem;padding-left:1.2rem}
+.fig-err{cursor:pointer;font-size:.85rem;color:var(--muted);border:1.5px dashed var(--line);border-radius:8px;padding:.6rem .8rem}
+.fig-err a{color:var(--pen);font-weight:700}
+.fig-src{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;overflow-wrap:anywhere;margin-top:.3rem;opacity:.8}
+.qimgs img{max-width:100%;height:auto;border-radius:8px;background:#fff;border:1px solid var(--line);justify-self:start}
+.qtext{font-size:1.08rem;white-space:pre-wrap;margin-bottom:1.1rem}
+.opts{display:grid;gap:.55rem}
+.opt{display:flex;gap:.85rem;align-items:flex-start;text-align:left;width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:.7rem .9rem;cursor:pointer;transition:border-color .12s}
+.opt:hover:not(:disabled){border-color:var(--pen)}
+.opt:disabled{cursor:default}
+.bubble{flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:2px solid var(--muted);display:grid;place-items:center;font:700 .85rem var(--display);color:var(--muted);margin-top:-.1rem;transition:background .12s,border-color .12s}
+.opt.multi .bubble{border-radius:7px}
+.opt[aria-checked="true"]{border-color:var(--pen);background:var(--pen-soft)}
+.opt[aria-checked="true"] .bubble{background:var(--pen);border-color:var(--pen);color:var(--surface)}
+.opt.is-right{border-color:var(--ok);background:var(--ok-soft)}
+.opt.is-right .bubble{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.opt.is-wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.is-wrong .bubble{background:var(--bad);border-color:var(--bad);color:var(--surface)}
+.opt .txt{padding-top:.1rem;white-space:pre-wrap}
+.verdict{margin-top:1rem;border-radius:12px;padding:.85rem 1rem;border:1.5px solid}
+.verdict.ok{border-color:var(--ok);background:var(--ok-soft)}
+.verdict.bad{border-color:var(--bad);background:var(--bad-soft)}
+.verdict.none{border-color:var(--line);background:var(--sunk)}
+.verdict strong{font-family:var(--display)}
+.qfoot{display:flex;gap:.6rem;margin-top:1.3rem;flex-wrap:wrap;align-items:center}
+.palette{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:1.4rem}
+.palette button{width:2.1rem;height:2.1rem;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font-weight:700;font-size:.8rem}
+.palette button.answered{background:var(--pen-soft);border-color:var(--pen)}
+.palette button.current{outline:2.5px solid var(--ink);outline-offset:1px}
+.kbd{font-size:.8rem;color:var(--muted)}
+
+/* results */
+.score{font:800 clamp(3rem,12vw,5rem)/1 var(--display);letter-spacing:-.04em}
+.score small{font-size:.35em;color:var(--muted);letter-spacing:0;font-weight:700}
+.rev{border-left:4px solid var(--line);padding:.35rem 0 .35rem .9rem}
+.rev.ok{border-color:var(--ok)} .rev.bad{border-color:var(--bad)}
+.rev+.rev{margin-top:.9rem}
+.rev .q{white-space:pre-wrap}
+
+/* subjects */
+.subject .subj-head{align-items:flex-start}
+.weeks{list-style:none;margin:.9rem 0 0;padding:0}
+.weeks li{display:grid;grid-template-columns:minmax(6rem,1fr) auto 5rem auto;gap:.8rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--line)}
+.weeks li:first-child{border-top:0}
+#preview .weeks li{grid-template-columns:1fr auto}
+.wname{font-weight:700}
+.wbar{height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.wbar i{display:block;height:100%;background:var(--ok)}
+.btn.small{padding:.35rem .75rem;font-size:.88rem}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;padding-left:1.6rem;align-items:center}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:.3rem .8rem;cursor:pointer;font-weight:700;font-size:.85rem;color:var(--muted)}
+.chip[aria-pressed="true"]{border-color:var(--pen);background:var(--pen-soft);color:var(--ink)}
+details.panel>summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:.4rem}
+details.panel>summary::before{content:"›";display:inline-block;width:1rem;transition:transform .15s;color:var(--muted)}
+details.panel[open]>summary::before{transform:rotate(90deg)}
+@media (max-width:520px){ .weeks li{grid-template-columns:1fr auto auto} .wbar{display:none} }
+/* browsing cards */
+.qcards{list-style:none;margin:.6rem 0 0;padding:0;display:grid;gap:.6rem}
+.qcard{border:1px solid var(--line);border-radius:10px;padding:.7rem .85rem;background:var(--bg)}
+.qc-head{gap:.5rem;margin-bottom:.35rem}
+.qc-text{white-space:pre-wrap;margin:.3rem 0 .5rem}
+.qc-passage{font-size:.88rem;color:var(--muted);margin:.2rem 0}
+.qc-passage summary{cursor:pointer;font-weight:700}
+.qc-passage div{white-space:pre-wrap;margin-top:.3rem}
+.qc-img{max-width:100%;height:auto;border-radius:6px;background:#fff;margin:.3rem 0;display:block}
+.qc-opts{list-style:none;margin:0;padding:0;display:grid;gap:.25rem}
+.qc-opts li{display:flex;gap:.55rem;align-items:baseline;padding:.2rem .4rem;border-radius:6px}
+.qc-opts li.right{background:var(--ok-soft)}
+.qc-l{font:700 .8rem var(--display);color:var(--muted);width:1.1rem;flex:none}
+.qc-ok{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--ok);white-space:nowrap}
+.pv-week{border-top:1px solid var(--line);padding-top:.8rem}
+.pv-week>summary,.pv-old>summary{cursor:pointer}
+.pv-old{margin:.5rem 0 .2rem;padding-left:.8rem;border-left:3px solid var(--line)}
+/* stats */
+nav.tabs{flex-wrap:wrap}
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:1rem}
+.totals b{display:block;font:800 1.7rem/1.1 var(--display);letter-spacing:-.02em}
+.totals span{font-size:.85rem;color:var(--muted)}
+.chartbox{overflow-x:auto}
+.trend{width:100%;min-width:20rem;height:auto;display:block}
+.trend .grid{stroke:var(--line);stroke-width:1}
+.trend .axis{fill:var(--muted);font-size:10px;font-family:var(--body)}
+.trend rect.hi{fill:var(--ok)} .trend rect.mid{fill:var(--mark)} .trend rect.lo{fill:var(--bad)}
+.tablebox{overflow-x:auto}
+table.wk{border-collapse:collapse;width:100%;font-size:.92rem;margin-top:.4rem}
+table.wk th{text-align:left;font-size:.8rem;color:var(--muted);font-weight:700;padding:.3rem .5rem;border-bottom:1px solid var(--line)}
+table.wk td{padding:.45rem .5rem;border-bottom:1px solid var(--line);white-space:nowrap}
+table.wk td:first-child{font-weight:700}
+.pill{display:inline-block;padding:.05rem .55rem;border-radius:999px;font-weight:700;font-size:.85rem}
+.pill.hi{background:var(--ok-soft);color:var(--ok)} .pill.mid{background:var(--sunk);color:var(--ink)} .pill.lo{background:var(--bad-soft);color:var(--bad)}
+.hist{list-style:none;margin:.6rem 0 0;padding:0}
+.histrow{display:grid;grid-template-columns:11rem 1fr auto 4.5rem;gap:.8rem;align-items:center;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:.6rem .2rem;cursor:pointer}
+.hist li:first-child .histrow{border-top:0}
+.histrow:hover{background:var(--sunk)}
+.hdate{font-size:.88rem;color:var(--muted)}
+.hwhat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:620px){ .histrow{grid-template-columns:1fr auto} .hdate{grid-column:1/-1} }
+.steps{margin:0;padding-left:1.3rem}
+.steps li+li{margin-top:.4rem}
+pre.code{max-height:18rem;overflow:auto;background:var(--sunk);border-radius:8px;padding:.8rem;font-size:.75rem;line-height:1.45;white-space:pre}
+/* import */
+.drop{border:2px dashed var(--line);border-radius:14px;padding:1.6rem 1rem;text-align:center;cursor:pointer;background:var(--bg)}
+.drop.over{border-color:var(--pen);background:var(--pen-soft)}
+.thumbs{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem}
+.thumb{position:relative;width:96px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb button{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:var(--ink);color:var(--surface);cursor:pointer;font-size:.8rem;line-height:1}
+.status{font-size:.9rem;color:var(--muted);min-height:1.4em}
+.status.err{color:var(--bad)}
+.qlist{list-style:none;margin:0;padding:0}
+.qlist li{display:flex;gap:.75rem;align-items:flex-start;padding:.6rem 0;border-top:1px solid var(--line)}
+.qlist li:first-child{border-top:0}
+.qlist .t{flex:1;min-width:0}
+.qlist .t div{white-space:pre-wrap;overflow-wrap:anywhere}
+.tag{display:inline-block;font-size:.75rem;font-weight:700;padding:.05rem .5rem;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.note{font-size:.85rem;color:var(--muted);border-left:3px solid var(--mark);padding-left:.7rem}
+.hidden{display:none!important}
+mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
+@media (max-width:520px){ .bank{grid-template-columns:1fr} .wrap{padding-top:.75rem} }
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <button class="brand" id="brand" aria-label="Drill home"><span class="dot" aria-hidden="true"></span>Drill</button>
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab" data-go="library">Subjects</button>
+      <button class="tab" data-go="setup">Practice</button>
+      <button class="tab" data-go="stats">Stats</button>
+      <button class="tab" data-go="import">Add questions</button>
+      <button class="tab" data-go="sheet" aria-label="Google Sheet sync">Sheet</button>
+    </nav>
+  </header>
+  <main id="app" aria-live="polite"><p class="muted">Loading your subjects…</p></main>
+  <p class="small muted" id="storeNote" style="margin-top:2.5rem"></p>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- tiny DOM helper (text only, never markup) ---------- */
+function h(tag, attrs, ...kids){
+  const e = document.createElement(tag);
+  if (attrs) for (const [k,v] of Object.entries(attrs)){
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "text") e.textContent = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()){ if (k == null || k === false) continue; e.append(k instanceof Node ? k : document.createTextNode(String(k))); }
+  return e;
+}
+const app = document.getElementById("app");
+function typeset(el){
+  const go = () => window.MathJax && MathJax.typesetPromise ? MathJax.typesetPromise([el]).catch(()=>{}) : null;
+  if (window.MathJax && MathJax.typesetPromise) go();
+  else { let n = 0; const t = setInterval(() => { if ((window.MathJax && MathJax.typesetPromise) || ++n > 40){ clearInterval(t); go(); } }, 150); }
+}
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const slug = s => (s||"bank").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) || "bank";
+function shuffle(a){ a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const LETTERS = "ABCDEFGHIJKLMNOP";
+const norm = s => String(s||"").toLowerCase().replace(/\s+/g," ").trim();
+// Options that only make sense in a fixed spot stay at the end when shuffling.
+const ANCHOR = /^(all|none|both|neither)\b.*(above|these|of the|options)|^(information|data)\b.*(not|in)sufficient|^cannot be determined|^he is indifferent|^indifferent|^both\b|^neither\b/i;
+
+/* ---------- state ---------- */
+const S = {
+  banks: {},   // id -> {id, kind:'bank', name, questions:[], updatedAt}
+  stats: {},   // bankId -> {kind:'stats', bankId, q:{qid:{seen,right,last}}}
+  view: "library",
+  manageId: null,
+  setup: null,
+  session: null,
+  history: [],
+  imp: { target: "", newName: "", group: "", preview: null, json: "", status: "", err: false, busy:false },
+};
+
+/* ---------- storage: claude db (synced, private to you) or this browser ---------- */
+const store = {
+  mode: null, db: null, coll: null, queues: {},
+  async init(){
+    let done = false;
+    const fallback = () => { if (done) return; done = true; this.local(); };
+    const timer = setTimeout(fallback, 10000);
+    try {
+      const [db, user] = await Promise.all([
+        window.claude && claude.use ? claude.use("db") : null,
+        window.claude && claude.use ? claude.use("user") : null
+      ]);
+      const id = db && user ? await user.id() : null;
+      if (done) return;
+      if (!db || !id){ clearTimeout(timer); fallback(); return; }
+      this.db = db; this.coll = db.collection("data/users/" + id);
+      this.coll.onSnapshot(snap => {
+        if (!done){ done = true; clearTimeout(timer); this.mode = "db"; }
+        const banks = {}, stats = {};
+        for (const d of snap.docs){
+          const v = d.data(); if (!v) continue;
+          if (v.kind === "bank") banks[d.id] = Object.assign({}, v, { id: d.id });
+          else if (v.kind === "stats") stats[v.bankId] = v;
+          else if (v.kind === "history") S.history = v.list || [];
+        }
+        S.banks = banks; S.stats = stats;
+        onData();
+      }, err => {
+        if (!done){ clearTimeout(timer); fallback(); }
+        else showNote("Sync stopped (" + err.code + "). Reload the page to reconnect.");
+      });
+    } catch(e){ clearTimeout(timer); fallback(); }
+  },
+  local(){
+    this.mode = "local";
+    try {
+      const raw = localStorage.getItem("drill:v1");
+      if (raw){ const v = JSON.parse(raw); S.banks = v.banks || {}; S.stats = v.stats || {}; S.history = v.history || []; }
+    } catch(e){}
+    onData();
+  },
+  persistLocal(){ try { localStorage.setItem("drill:v1", JSON.stringify({ banks:S.banks, stats:S.stats, history:S.history || [] })); } catch(e){ showNote("Couldn’t save in this browser (storage full or blocked)."); } },
+  // one write at a time per document; the latest pending value wins
+  write(docId, value){
+    if (this.mode !== "db"){ this.persistLocal(); return Promise.resolve(); }
+    const q = this.queues[docId] || (this.queues[docId] = { running:false, next:undefined });
+    q.next = value;
+    if (q.running) return Promise.resolve();
+    const run = async () => {
+      q.running = true;
+      while (q.next !== undefined){
+        const v = q.next; q.next = undefined;
+        try { v === null ? await this.coll.doc(docId).delete() : await this.coll.doc(docId).set(v); }
+        catch(e){
+          if (e && e.code === "quota_exceeded") showNote("Storage is full. Delete a subject or some weeks to make room.");
+          else if (e && e.code === "invalid_argument") showNote("A subject got too large to save in one piece (over ~250 KB). Split it into two subjects.");
+          else if (e && e.code === "unavailable"){ await new Promise(r=>setTimeout(r, 600+Math.random()*800)); if (q.next === undefined) q.next = v; }
+        }
+      }
+      q.running = false;
+    };
+    return run();
+  },
+  saveBank(b){ b.updatedAt = Date.now(); S.banks[b.id] = b; const { id, ...body } = b; sheet.scheduleBackup(); return this.write(b.id, body); },
+  deleteBank(id){ delete S.banks[id]; delete S.stats[id]; this.write(id, null); sheet.scheduleBackup(); return this.write("stats_" + id, null); },
+  saveStats(bankId){ const s = S.stats[bankId]; if (s) return this.write("stats_" + bankId, s); },
+  saveHistory(){ return this.write("history", { kind:"history", list: (S.history || []).slice(0, 120) }); },
+};
+function showNote(t){ document.getElementById("storeNote").textContent = t; }
+let firstData = true;
+function onData(){
+  if (firstData){
+    firstData = false;
+    sheet.flush();
+    if (sheet.on) sheet.restore().then(st => { const r = mergeState(st); if ((r.addedQ || r.addedS) && ["library","stats","setup"].includes(S.view)) render(); }).catch(()=>{});
+    showNote(store.mode === "db"
+      ? "Your subjects are saved to your Claude account and stay private to you."
+      : sheet.on ? "Saved in this browser and backed up to your Google Sheet." : "Saved in this browser only. Connect a Google Sheet (Sheet tab) or use Manage → Export backup.");
+  }
+  if (["library","manage","setup","stats"].includes(S.view) || (S.view === "import" && !S.imp.busy)) render();
+}
+
+/* ---------- file saving, when opened inside Claude ---------- */
+let downloads = null;
+(async () => { try { if (window.claude && claude.use) downloads = await claude.use("downloads"); } catch(e){} })();
+
+/* ---------- portal (seek / Course Builder) import ---------- */
+/* Converts a seek.onlinedegree.iitm.ac.in (Course Builder) assessment response,
+   or a HAR file holding several of them, into Drill questions. */
+function portalDecodeEntities(s){
+  return s.replace(/&nbsp;/g," ").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'")
+          .replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCodePoint(parseInt(n,16))).replace(/&amp;/g,"&");
+}
+function portalHtml(html){
+  const images = [];
+  let s = String(html || "");
+  // math: <gcb-math>..</gcb-math>, also tolerate a second opening tag used as the closer
+  s = s.replace(/<gcb-math[^>]*>([\s\S]*?)<\/?gcb-math>/gi, (_, m) => " \\(" + portalDecodeEntities(m).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim() + "\\) ");
+  s = s.replace(/<img\b[^>]*>/gi, tag => {
+    const attr = n => { const m = tag.match(new RegExp("\\b" + n + "\\s*=\\s*[\"']([^\"']+)[\"']", "i")); return m ? portalDecodeEntities(m[1]).trim() : ""; };
+    let src = attr("src"); const dp = attr("data-path");
+    if (/^\/\//.test(src)) src = "https:" + src;
+    if (/^http:\/\//i.test(src)) src = "https://" + src.slice(7);
+    if (!/^https:\/\//i.test(src) && dp) src = "https://storage.googleapis.com/" + dp.replace(/^\/+/, "");
+    else if (!/^https:\/\//i.test(src) && src && !/^data:/i.test(src)) src = "https://seek.onlinedegree.iitm.ac.in/" + src.replace(/^\/+/, "");
+    if (/^https:\/\//i.test(src)) images.push(src);
+    return "\n";
+  });
+  s = s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/?(div|p|li|ul|ol|tr|table|h\d)\b[^>]*>/gi, "\n").replace(/<td\b[^>]*>/gi, " ").replace(/<[^>]+>/g, "");
+  s = portalDecodeEntities(s).replace(/\t/g," ").replace(/[ \u00a0]+/g," ");
+  s = s.split("\n").map(l => l.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  s = s.replace(/(\\\)) +([,.;:?!)])/g, "$1$2").replace(/ +(\\\))/g, "$1").replace(/(\\\() +/g, "$1").replace(/\( \\\(/g,"(\\(");
+  return { text: s, images };
+}
+function portalFindHtml(it){
+  // content blocks name their HTML differently; take the likeliest field, else any HTML-looking string
+  for (const k of ["html","content","text","value","body","description","introduction"]){
+    const v = it[k];
+    if (typeof v === "string" && v.trim()) return v;
+    if (v && typeof v === "object" && typeof v.value === "string" && v.value.trim()) return v.value;
+  }
+  let found = "";
+  const walk = (o, d) => { if (found || d > 4 || !o || typeof o !== "object") return;
+    for (const v of Object.values(o)){ if (typeof v === "string" && /<(img|p|div|span|br)\b/i.test(v)){ found = v; return; } walk(v, d + 1); } };
+  walk(it, 0);
+  return found;
+}
+function isPortalAssessment(v){ return v && typeof v === "object" && Array.isArray(v.sections) && v.sections.some(s => Array.isArray(s.items)); }
+function portalConvert(data){
+  const title = String(data.title || "").trim();
+  const wk = title.match(/^week\s*\d+/i);
+  const group = wk ? wk[0].replace(/\s+/g," ").replace(/^week/i,"Week") : title;
+  // Shared context can live in a section's introduction or in non-question
+  // content items ("The information below is common to Questions 1 to 2").
+  const raw = [];
+  let ctxN = 0;
+  const ctxFrom = html => { const c = portalHtml(html); return (c.text || c.images.length) ? { text: c.text.replace(/^paragraph\s+for\s+questions?\s*\d+\s*(?:[-–to]+\s*\d+)?\s*:?\s*/i, ""), images: c.images, id: "ctx-" + (++ctxN) } : null; };
+  for (const sec of data.sections || []){
+    let ctx = sec.introduction ? ctxFrom(typeof sec.introduction === "string" ? sec.introduction : (sec.introduction.value || "")) : null;
+    for (const it of sec.items || []){
+      if (it.kind === "question" && it.question){ raw.push({ instance: it.instance_id, q: it.question, ctx }); continue; }
+      const html = portalFindHtml(it);
+      if (html){ const c = ctxFrom(html); if (c) ctx = c; }
+    }
+  }
+  const saved = data.saved_answers || {};
+  const out = [];
+  let skipped = 0;
+  raw.forEach((r, i) => {
+    const q = r.q;
+    const p = portalHtml(q.prompt);
+    let text = p.text, passage = "", header = null;
+    const hm = text.match(/^paragraph\s+for\s+questions?\s*(\d+)\s*(?:[-–to]+\s*(\d+))?\s*:?\s*/i);
+    if (hm){ header = { a: +hm[1], b: +(hm[2] || hm[1]) }; text = text.slice(hm[0].length).trim(); }
+    const item = { id: "p" + (q.id || r.instance || i), group, images: p.images, source: title };
+    if (header){
+      const blocks = text.split(/\n\n+/);
+      if (blocks.length > 1){ passage = blocks.slice(0, -1).join("\n\n"); text = blocks[blocks.length - 1]; }
+      item._header = header;
+    }
+    item.passage = passage; item.text = text;
+    const fb = portalHtml(q.default_feedback || "").text;
+    if (fb) item.explanation = fb;
+    if (Array.isArray(q.choices) && q.choices.length){
+      item.type = q.multiple_selections ? "multi" : "single";
+      item.options = q.choices.map(c => portalHtml(c.text).text || "(blank option)");
+      const optImgs = q.choices.flatMap(c => portalHtml(c.text).images);
+      if (optImgs.length) item.images = item.images.concat(optImgs);
+      let ans = q.choices.map((c, k) => Number(c.score) > 0 ? k : -1).filter(k => k >= 0);
+      if (!ans.length && Number(data.score) === 100 && saved[r.instance] && Array.isArray(saved[r.instance].selected)){
+        ans = saved[r.instance].selected.map(id => q.choices.findIndex(c => String(c.id) === String(id))).filter(k => k >= 0);
+      }
+      item.answer = ans.length ? ans : null;
+      if (ans.length > 1) item.type = "multi";
+    } else if (Array.isArray(q.graders) && q.graders.length){
+      item.type = "numeric";
+      const g = q.graders.find(g => Number(g.score) > 0) || q.graders[0];
+      const resp = String(g.response || "").trim();
+      const nums = resp.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || [];
+      if (/range/i.test(g.matcher || "") && nums.length >= 2){ const lo = +nums[0], hi = +nums[1]; item.answer = (lo + hi) / 2; item.tolerance = Math.abs(hi - lo) / 2; }
+      else if (nums.length){ item.answer = +nums[0]; }
+      else if (resp){ item.type = "text"; }
+      else item.answer = null;
+      if (item.type === "text"){ skipped++; return; }
+    } else { skipped++; return; }
+    item._pos = i + 1;
+    item._ctx = r.ctx;
+    out.push(item);
+  });
+  // carry shared paragraphs to the follow-up questions they cover; keep them as a linked set
+  for (const lead of out.filter(x => x._header)){
+    const { a, b } = lead._header;
+    const setId = "set-" + lead.id;
+    const ctx = lead.passage ? lead.passage + (lead.passage ? "\n\n" : "") : "";
+    for (const x of out){
+      if (x._pos < a || x._pos > b) continue;
+      x.set = setId; x.seq = x._pos;
+      if (x === lead) continue;
+      if (!x.passage){
+        x.passage = (ctx + `Earlier in this set (Q${lead._pos}): ` + lead.text).trim();
+        if (!x.images.length) x.images = lead.images.slice();
+      }
+    }
+  }
+  // attach section / content-block context
+  const ctxCount = {};
+  for (const x of out) if (x._ctx) ctxCount[x._ctx.id] = (ctxCount[x._ctx.id] || 0) + 1;
+  for (const x of out){
+    const c = x._ctx; if (!c) continue;
+    if (c.text && !(x.passage || "").includes(c.text)) x.passage = x.passage ? c.text + "\n\n" + x.passage : c.text;
+    const imgs = c.images.filter(u => !x.images.includes(u));
+    if (imgs.length) x.images = imgs.concat(x.images);
+    if (!x.set && ctxCount[c.id] > 1){ x.set = c.id + "-" + data.id; x.seq = x._pos; }
+  }
+  out.forEach(x => { delete x._header; delete x._pos; delete x._ctx; if (!x.images.length) delete x.images; });
+  return { title, group, questions: out, skipped };
+}
+function portalExtractAll(v){
+  // a single assessment response, an array of them, or a HAR export
+  const found = [];
+  const seen = new Set();
+  const take = d => { if (isPortalAssessment(d)){ const key = d.id + "|" + d.title; if (!seen.has(key)){ seen.add(key); found.push(portalConvert(d)); } } };
+  if (v && v.log && Array.isArray(v.log.entries)){
+    for (const e of v.log.entries){
+      const c = e.response && e.response.content; if (!c || !c.text) continue;
+      let t = c.text;
+      if (c.encoding === "base64"){ try { t = decodeURIComponent(escape(atob(t))); } catch(err){ continue; } }
+      if (t.indexOf('"sections"') < 0) continue;
+      try { take(JSON.parse(t)); } catch(err){}
+    }
+  } else if (Array.isArray(v)) v.forEach(take);
+  else take(v);
+  return found;
+}
+
+/* ---------- question helpers ---------- */
+function validQ(q){
+  if (!q || typeof q !== "object" || !String(q.text||"").trim()) return null;
+  const type = ["single","multi","numeric"].includes(q.type) ? q.type : (Array.isArray(q.options) && q.options.length ? "single" : "numeric");
+  const out = {
+    id: q.id ? String(q.id) : uid(), type,
+    group: String(q.group || "").trim(),
+    passage: String(q.passage || "").trim(),
+    text: String(q.text).trim(),
+    explanation: String(q.explanation || "").trim(),
+  };
+  if (Array.isArray(q.images)){ const im = q.images.map(String).filter(u => /^https:\/\//i.test(u)).slice(0, 8); if (im.length) out.images = im; }
+  if (q.set){ out.set = String(q.set); out.seq = Number(q.seq) || 0; }
+  if (q.source) out.source = String(q.source);
+  if (type === "numeric"){
+    const a = Number(q.answer);
+    out.answer = q.answer === null || q.answer === undefined || q.answer === "" || !isFinite(a) ? null : a;
+    out.tolerance = isFinite(Number(q.tolerance)) && q.tolerance !== null && q.tolerance !== "" ? Math.abs(Number(q.tolerance)) : null;
+  } else {
+    out.options = (q.options||[]).map(o => String(o).trim()).filter(Boolean);
+    if (out.options.length < 2) return null;
+    let ans = q.answer;
+    if (ans === null || ans === undefined) out.answer = null;
+    else {
+      ans = Array.isArray(ans) ? ans : [ans];
+      const idx = ans.map(a => typeof a === "string" && /^[A-Za-z]$/.test(a) ? LETTERS.indexOf(a.toUpperCase()) : Number(a))
+                     .filter(i => Number.isInteger(i) && i >= 0 && i < out.options.length);
+      out.answer = idx.length ? [...new Set(idx)].sort((a,b)=>a-b) : null;
+      if (out.answer && out.answer.length > 1) out.type = "multi";
+    }
+  }
+  return out;
+}
+const fingerprint = q => norm(q.passage) + "|" + norm(q.text) + "|" + (q.options||[]).map(norm).join("#");
+function isCorrect(q, resp){
+  if (resp == null) return false;
+  if (q.type === "numeric"){
+    if (q.answer == null || resp === "" || !isFinite(Number(resp))) return false;
+    const tol = q.tolerance != null ? q.tolerance : Math.max(0.01, Math.abs(q.answer) * 0.01);
+    return Math.abs(Number(resp) - q.answer) <= tol + 1e-12;
+  }
+  if (!q.answer) return false;
+  const a = [...resp].sort((x,y)=>x-y);
+  return a.length === q.answer.length && a.every((v,i)=>v===q.answer[i]);
+}
+const hasKey = q => q.answer != null;
+const answered = (q, r) => q.type === "numeric" ? (r != null && String(r).trim() !== "") : (r && r.length > 0);
+
+/* ---------- routing ---------- */
+function go(view){ S.view = view; render(); window.scrollTo(0,0); }
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+  if (S.view === "quiz" && S.session && !S.session.finished && !confirm("Leave this session? Your progress in it won’t be kept.")) return;
+  if (b.dataset.go === "setup") openSetup(); else go(b.dataset.go);
+}));
+document.getElementById("brand").addEventListener("click", () => document.querySelector('[data-go="library"]').click());
+
+function render(){
+  document.querySelectorAll("[data-go]").forEach(b => {
+    const cur = b.dataset.go === S.view || (b.dataset.go === "library" && S.view === "manage") || (b.dataset.go === "setup" && ["quiz","results"].includes(S.view)) || (b.dataset.go === "stats" && S.view === "session");
+    cur ? b.setAttribute("aria-current","page") : b.removeAttribute("aria-current");
+  });
+  app.replaceChildren();
+  const v = { library: viewLibrary, manage: viewManage, setup: viewSetup, quiz: viewQuiz, results: viewResults, import: viewImport, stats: viewStats, session: viewSession, sheet: viewSheet }[S.view] || viewLibrary;
+  const node = v();
+  app.append(node);
+  typeset(app);
+}
+
+/* ---------- subjects and weeks ---------- */
+const NO_WEEK = "No week";
+const weekName = q => q.group || "";
+function weekSort(a, b){
+  if (!a) return 1; if (!b) return -1;
+  const na = a.match(/\d+/), nb = b.match(/\d+/);
+  if (na && nb && +na[0] !== +nb[0]) return +na[0] - +nb[0];
+  return a.localeCompare(b, undefined, { numeric:true });
+}
+function weeksOf(b){
+  const m = new Map();
+  for (const q of b.questions){ const w = weekName(q); if (!m.has(w)) m.set(w, []); m.get(w).push(q); }
+  return [...m.keys()].sort(weekSort).map(w => ({ name:w, questions:m.get(w) }));
+}
+function tally(bankId, qs){
+  const st = (S.stats[bankId] && S.stats[bankId].q) || {};
+  let tried = 0, right = 0;
+  for (const q of qs){ const s = st[q.id]; if (s && s.seen){ tried++; if (s.lastRight) right++; } }
+  return { tried, right, total: qs.length };
+}
+const sortedSubjects = () => Object.keys(S.banks).sort((a,b)=>S.banks[a].name.localeCompare(S.banks[b].name));
+
+/* ---------- figures (with a local copy kept in IndexedDB) ---------- */
+const figStore = {
+  db: null,
+  open(){
+    if (this.db) return this.db;
+    this.db = new Promise((res) => {
+      try {
+        const r = indexedDB.open("drill-figures", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("figs");
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => res(null);
+      } catch(e){ res(null); }
+    });
+    return this.db;
+  },
+  async get(url){ const db = await this.open(); if (!db) return null;
+    return new Promise(res => { try { const q = db.transaction("figs").objectStore("figs").get(url); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); } catch(e){ res(null); } }); },
+  async put(url, blob){ const db = await this.open(); if (!db) return false;
+    return new Promise(res => { try { const t = db.transaction("figs", "readwrite"); t.objectStore("figs").put(blob, url); t.oncomplete = () => res(true); t.onerror = () => res(false); } catch(e){ res(false); } }); },
+};
+const figURLs = new Map();
+const figKey = url => "drill:fig:" + url;
+async function cachedFig(url){
+  if (figURLs.has(url)) return figURLs.get(url);
+  let d = null;
+  const blob = await figStore.get(url);
+  if (blob) { try { d = await blobToDataURL(blob); } catch(e){} }
+  if (!d) { try { d = localStorage.getItem(figKey(url)); } catch(e){} }
+  if (d) figURLs.set(url, d);
+  return d;
+}
+async function shrinkToDataURL(blob){
+  // keep copies small: at most 1400px wide, re-encoded
+  const raw = await blobToDataURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = raw; });
+    const scale = Math.min(1, 1400 / img.naturalWidth);
+    if (scale === 1 && raw.length < 400000) return raw;
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    const out = c.toDataURL("image/webp", 0.85);
+    return out.startsWith("data:image/webp") ? out : c.toDataURL("image/jpeg", 0.85);
+  } catch(e){ return raw; }
+}
+async function saveFig(url, blob){
+  const d = await shrinkToDataURL(blob);
+  let ok = false;
+  try { ok = await figStore.put(url, await dataURLToBlob(d)); } catch(e){}
+  if (!ok){ try { localStorage.setItem(figKey(url), d); ok = true; } catch(e){} }
+  figURLs.set(url, d);   // show it now even if it couldn't be kept
+  return ok;
+}
+const inPreview = (() => { try { return window.self !== window.top; } catch(e){ return true; } })();
+function figure(src, label, cls){
+  const wrap = h("div", { class:"fig " + (cls || "") });
+  let tries = 0;
+  const show = (url, opts) => {
+    const img = h("img", { alt:label });
+    if (opts && opts.noRef) img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", () => {
+      tries++;
+      if (tries === 1) return show(src, { noRef:true });                       // retry without a referrer
+      if (tries === 2) return show(src + (src.includes("?") ? "&" : "?") + "_=" + Date.now(), {}); // retry bypassing cache
+      fallback();
+    });
+    img.src = url;
+    wrap.replaceChildren(img);
+  };
+  let msg = null;
+  const accept = async blob => {
+    if (!blob || !/^image\//.test(blob.type)){ if (msg) msg.textContent = "That wasn’t an image. In the other tab, right-click the picture and choose Copy image (not Copy image address)."; return false; }
+    const kept = await saveFig(src, blob);
+    document.querySelectorAll(".fig").forEach(f => { if (f._src === src) f._reload(); });
+    if (!kept) showNote("Figure added for now, but this browser view won’t let Drill keep it. Open drill.html directly in Chrome to save figures.");
+    return true;
+  };
+  const readClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items){ const t = it.types.find(t => t.startsWith("image/")); if (t) return accept(await it.getType(t)); }
+      if (msg) msg.textContent = "No image on the clipboard. In the other tab, right-click the picture → Copy image, then try again.";
+    } catch(e){ if (msg) msg.textContent = "Press Ctrl+V now (this view doesn’t allow the paste button)."; }
+  };
+  const fallback = () => {
+    const fileIn = h("input", { type:"file", accept:"image/*", class:"hidden", onchange:async e => { const f = e.target.files[0]; if (f) await accept(f); } });
+    const zone = h("div", { class:"fig-err", tabindex:"0", role:"group", "aria-label":`${label} didn’t load. Paste the image here.`,
+      onpaste: async e => { const f = [...(e.clipboardData && e.clipboardData.files || [])].find(f => /^image\//.test(f.type)); if (f){ e.preventDefault(); e.stopPropagation(); await accept(f); } },
+      ondragover: e => { e.preventDefault(); zone.classList.add("over"); }, ondragleave: () => zone.classList.remove("over"),
+      ondrop: async e => { e.preventDefault(); zone.classList.remove("over"); const f = [...e.dataTransfer.files].find(f => /^image\//.test(f.type)); if (f) await accept(f); } },
+      h("strong", null, `${label} didn’t load here.`),
+      inPreview ? h("p", { class:"small", style:"margin:.3rem 0" }, "You’re viewing Drill inside a preview, which blocks outside images. Download drill.html and open it directly in Chrome, and figures load by themselves.") : null,
+      h("ol", { class:"fig-steps" },
+        h("li", null, /^https:\/\//i.test(src) ? h("a", { href:src, target:"_blank", rel:"noopener noreferrer" }, "Open it in a new tab") : "Open it in a new tab", ", right-click the image → Copy image."),
+        h("li", null, "Click this box and press Ctrl+V. ", h("button", { class:"btn ghost small", onclick:e => { e.stopPropagation(); fileIn.click(); } }, "or choose a saved file"))),
+      h("div", { class:"row", style:"margin:.2rem 0" }, h("button", { class:"btn small", onclick:e => { e.stopPropagation(); readClipboard(); } }, "Paste copied image")),
+      (msg = h("div", { class:"small muted", "aria-live":"polite" }, "Drill keeps its own copy, so you only do this once per figure.")),
+      fileIn);
+    zone.addEventListener("click", () => zone.focus());
+    wrap.replaceChildren(zone);
+  };
+  wrap._src = src;
+  wrap._reload = async () => { const c = await cachedFig(src); if (c){ const img = h("img", { alt:label }); img.src = c; wrap.replaceChildren(img); } else { tries = 0; show(src); } };
+  wrap._reload();
+  return wrap;
+}
+async function blobToDataURL(b){ return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); }); }
+async function dataURLToBlob(d){ return (await fetch(d)).blob(); }
+
+/* ---------- read-only question card for browsing ---------- */
+function qCard(q, n, showKey, onRemove){
+  const li = h("li", { class:"qcard" });
+  const head = h("div", { class:"row qc-head" }, h("span", { class:"tag" }, "Q" + n),
+    q.set ? h("span", { class:"small muted" }, "Linked set") : null,
+    !hasKey(q) ? h("span", { class:"small muted" }, "No answer key") : null,
+    h("span", { class:"spacer" }),
+    onRemove ? h("button", { class:"btn ghost danger small", "aria-label":`Remove question ${n}`, onclick:onRemove }, "Remove") : null);
+  li.append(head);
+  if (q.passage) li.append(h("details", { class:"qc-passage" }, h("summary", null, "Shared paragraph"), h("div", null, q.passage)));
+  if (q.images) q.images.forEach((src, k) => li.append(figure(src, `Figure ${k+1}`, "qc-img")));
+  li.append(h("div", { class:"qc-text" }, q.text));
+  if (q.type === "numeric"){
+    li.append(h("div", { class:"small muted" }, "Numeric answer" + (showKey && hasKey(q) ? `: ${q.answer}` + (q.tolerance ? ` (±${q.tolerance})` : "") : "")));
+  } else {
+    const ol = h("ol", { class:"qc-opts" });
+    q.options.forEach((o, i) => {
+      const right = showKey && hasKey(q) && q.answer.includes(i);
+      ol.append(h("li", { class: right ? "right" : "" }, h("span", { class:"qc-l" }, LETTERS[i]), h("span", null, o), right ? h("span", { class:"qc-ok" }, "✓ answer") : null));
+    });
+    li.append(ol);
+  }
+  if (showKey && q.explanation) li.append(h("div", { class:"small muted", style:"white-space:pre-wrap" }, q.explanation));
+  return li;
+}
+
+/* ---------- library ---------- */
+function viewLibrary(){
+  const ids = sortedSubjects();
+  const root = h("div", { class:"stack" });
+  if (!ids.length){
+    root.append(h("section", { class:"hero" },
+      h("h1", null, "Practice like it’s the first time."),
+      h("p", { class:"muted" }, "Questions and options are shuffled every session, and answers stay hidden until you commit.")),
+      h("div", { class:"empty stack" },
+        h("h2", null, "No subjects yet"),
+        h("p", { class:"muted" }, "Add an assignment from the portal to create your first subject."),
+        h("div", { class:"row", style:"justify-content:center" }, h("button", { class:"btn primary", onclick:()=>go("import") }, "Add questions"))));
+    return root;
+  }
+  root.append(h("div", { class:"row" }, h("h1", null, "Subjects"), h("span", { class:"spacer" }),
+    ids.length > 1 ? h("button", { class:"btn", onclick:()=>openSetup(ids) }, "Mix all subjects") : null));
+  for (const id of ids){
+    const b = S.banks[id];
+    const weeks = weeksOf(b);
+    const t = tally(id, b.questions);
+    const card = h("section", { class:"panel subject" },
+      h("div", { class:"row subj-head" },
+        h("div", null, h("h2", null, b.name),
+          h("div", { class:"small muted" }, `${weeks.length} week${weeks.length===1?"":"s"}, ${b.questions.length} questions` + (t.tried ? `, ${t.right} right on your last try` : ""))),
+        h("span", { class:"spacer" }),
+        h("button", { class:"btn ghost", onclick:()=>{ S.manageId = id; go("manage"); } }, "Manage"),
+        h("button", { class:"btn primary", disabled: !b.questions.length, onclick:()=>openSetup([id]) }, "Practice all")));
+    const list = h("ul", { class:"weeks" });
+    for (const w of weeks){
+      const wt = tally(id, w.questions);
+      list.append(h("li", null,
+        h("span", { class:"wname" }, w.name || NO_WEEK),
+        h("span", { class:"small muted" }, `${w.questions.length} q`),
+        h("span", { class:"wbar", title: wt.tried ? `${wt.right} of ${wt.total} right on your last try` : "Not practiced yet" },
+          h("i", { style:`width:${Math.round(wt.right / Math.max(1, wt.total) * 100)}%` })),
+        h("button", { class:"btn small", onclick:()=>openSetup([id], [id + "::" + w.name]) }, "Practice")));
+    }
+    card.append(list);
+    root.append(card);
+  }
+  return root;
+}
+
+/* ---------- manage a subject ---------- */
+function viewManage(){
+  const b = S.banks[S.manageId];
+  if (!b){ S.view = "library"; return viewLibrary(); }
+  const showKeys = S.manageShowKeys || false;
+  const root = h("div", { class:"stack" });
+  const nameIn = h("input", { type:"text", value:b.name, "aria-label":"Subject name" });
+  root.append(
+    h("div", { class:"row" }, h("button", { class:"btn ghost", onclick:()=>go("library") }, "‹ Subjects")),
+    h("div", { class:"panel stack" },
+      h("label", { class:"field" }, h("span", null, "Subject name"), nameIn),
+      h("div", { class:"row" },
+        h("button", { class:"btn", onclick:()=>{ const n = nameIn.value.trim(); if (n){ b.name = n; store.saveBank(b); render(); } } }, "Rename"),
+        h("button", { class:"btn", onclick:()=>exportBank(b) }, "Export backup"),
+        h("button", { class:"btn", onclick:()=>{ S.imp.target = b.id; go("import"); } }, "Add a week"),
+        h("span", { class:"spacer" }),
+        h("button", { class:"btn danger", onclick:()=>{ if (confirm(`Delete “${b.name}” and all ${b.questions.length} questions? This can’t be undone.`)){ store.deleteBank(b.id); go("library"); } } }, "Delete subject")),
+      h("p", { class:"status", id:"exportStatus" }),
+      h("label", { class:"check small" }, h("input", { type:"checkbox", checked: showKeys, onchange:e=>{ S.manageShowKeys = e.target.checked; render(); } }), "Show answer keys")));
+  for (const w of weeksOf(b)){
+    const renameIn = h("input", { type:"text", value:w.name, placeholder:NO_WEEK, "aria-label":"Week name", style:"max-width:12rem" });
+    const list = h("ul", { class:"qcards" });
+    w.questions.forEach((q, i) => list.append(qCard(q, i+1, showKeys, () => { b.questions = b.questions.filter(x => x !== q); store.saveBank(b); render(); })));
+    S.openWeeks = S.openWeeks || new Set();
+    const wk = b.id + "::" + w.name;
+    root.append(h("details", { class:"panel", open: S.openWeeks.has(wk), ontoggle:e=>{ e.target.open ? S.openWeeks.add(wk) : S.openWeeks.delete(wk); } },
+      h("summary", { class:"wsum" }, h("strong", null, w.name || NO_WEEK), h("span", { class:"small muted" }, ` ${w.questions.length} questions`)),
+      h("div", { class:"row", style:"margin:.8rem 0" },
+        renameIn,
+        h("button", { class:"btn small", onclick:()=>{ const n = renameIn.value.trim(); for (const q of w.questions) q.group = n; store.saveBank(b); render(); } }, "Rename week"),
+        h("span", { class:"spacer" }),
+        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm(`Delete ${w.name || "these"} questions (${w.questions.length})?`)){ const set = new Set(w.questions); b.questions = b.questions.filter(q => !set.has(q)); store.saveBank(b); render(); } } }, "Delete week")),
+      list));
+  }
+  return root;
+}
+async function exportBank(b){
+  const figures = {};
+  for (const q of b.questions) for (const u of (q.images || [])){
+    if (figures[u]) continue;
+    const blob = await figStore.get(u);
+    if (blob) { try { figures[u] = await blobToDataURL(blob); } catch(e){} }
+  }
+  const data = JSON.stringify(Object.keys(figures).length ? { name: b.name, questions: b.questions, figures } : { name: b.name, questions: b.questions }, null, 2);
+  const status = document.getElementById("exportStatus");
+  if (downloads){
+    try { await downloads.save({ filename: slug(b.name) + ".json", data }); status.textContent = "Saved."; return; }
+    catch(e){ if (e && e.code === "dismissed") return; }
+  }
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([data], { type:"application/json" }));
+    a.download = slug(b.name) + ".json"; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    status.textContent = "Downloaded " + slug(b.name) + ".json. Drop it into Add questions to restore.";
+  } catch(e){
+    try { await navigator.clipboard.writeText(data); status.textContent = "Copied the backup to your clipboard."; }
+    catch(e2){ status.textContent = "Couldn’t save or copy here."; }
+  }
+}
+
+/* ---------- practice setup ---------- */
+function openSetup(bankIds, weekKeys){
+  const all = Object.keys(S.banks);
+  const prev = S.setup || {};
+  S.setup = {
+    banks: new Set(bankIds || (prev.banks && [...prev.banks].filter(id=>S.banks[id]).length ? [...prev.banks].filter(id=>S.banks[id]) : all)),
+    groups: weekKeys ? new Set(weekKeys) : null, // null = all weeks
+    count: prev.count || "",
+    order: prev.order || "shuffle",
+    shuffleOpts: prev.shuffleOpts !== false,
+    feedback: prev.feedback || "instant",
+    focus: prev.focus || "all",
+    keepSets: prev.keepSets !== false,
+  };
+  go("setup");
+}
+function poolFor(st){
+  const pool = [];
+  for (const id of st.banks){
+    const b = S.banks[id]; if (!b) continue;
+    const stats = (S.stats[id] && S.stats[id].q) || {};
+    for (const q of b.questions){
+      if (st.groups && !st.groups.has(id + "::" + (q.group || ""))) continue;
+      const s = stats[q.id];
+      if (st.focus === "missed" && !(s && s.seen && !s.lastRight)) continue;
+      if (st.focus === "unseen" && s && s.seen) continue;
+      pool.push({ bankId:id, q });
+    }
+  }
+  return pool;
+}
+function viewSetup(){
+  const st = S.setup;
+  if (!st) { openSetup(); return h("div"); }
+  const ids = Object.keys(S.banks);
+  if (!ids.length) return h("div", { class:"empty stack" }, h("h2", null, "Nothing to practice yet"), h("div", { class:"row", style:"justify-content:center" }, h("button", { class:"btn primary", onclick:()=>go("import") }, "Add questions")));
+  const root = h("div", { class:"stack" }, h("h1", null, "Set up a session"));
+
+  const bankBox = h("div", { class:"panel stack" }, h("h2", null, "What to practice"));
+  const allKeysFor = () => { const k = new Set(); for (const bid of st.banks) for (const q of S.banks[bid].questions) k.add(bid + "::" + weekName(q)); return k; };
+  for (const id of sortedSubjects()){
+    const b = S.banks[id];
+    bankBox.append(h("label", { class:"check" },
+      h("input", { type:"checkbox", checked: st.banks.has(id), onchange:e=>{
+        if (!st.groups) st.groups = allKeysFor();
+        if (e.target.checked){ st.banks.add(id); for (const w of weeksOf(b)) st.groups.add(id + "::" + w.name); }
+        else { st.banks.delete(id); for (const k of [...st.groups]) if (k.startsWith(id + "::")) st.groups.delete(k); }
+        render(); } }),
+      h("span", null, h("strong", null, b.name), " ", h("span", { class:"muted small" }, `${b.questions.length} questions`))));
+    if (st.banks.has(id)){
+      const weeks = weeksOf(b);
+      if (weeks.length > 1){
+        const g = h("div", { class:"chips" });
+        for (const w of weeks){
+          const key = id + "::" + w.name;
+          const on = !st.groups || st.groups.has(key);
+          g.append(h("button", { class:"chip", "aria-pressed": String(on), onclick:()=>{
+            if (!st.groups) st.groups = allKeysFor();
+            on ? st.groups.delete(key) : st.groups.add(key);
+            render(); } }, `${w.name || NO_WEEK} (${w.questions.length})`));
+        }
+        g.append(h("button", { class:"btn ghost small", onclick:()=>{ if (!st.groups) st.groups = allKeysFor(); for (const w of weeks) st.groups.add(id + "::" + w.name); render(); } }, "All weeks"));
+        bankBox.append(g);
+      }
+    }
+  }
+  root.append(bankBox);
+
+  const seg = (label, key, choices) => h("div", null,
+    h("div", { class:"small", style:"font-weight:700;margin-bottom:.3rem" }, label),
+    h("div", { class:"seg", role:"group", "aria-label":label },
+      choices.map(([val, text]) => h("button", { "aria-pressed": String(st[key] === val), onclick:()=>{ st[key] = val; render(); } }, text))));
+
+  const pool = poolFor(st);
+  const countIn = h("input", { type:"number", min:"1", max:String(pool.length||1), placeholder:`All ${pool.length}`, value: st.count, style:"max-width:9rem", oninput:e=>{ st.count = e.target.value; } });
+  root.append(h("div", { class:"panel stack" },
+    h("h2", null, "How"),
+    seg("Show the answer", "feedback", [["instant","After each question"],["exam","At the end (exam mode)"]]),
+    seg("Question order", "order", [["shuffle","Shuffled"],["original","As imported"]]),
+    seg("Which questions", "focus", [["all","All"],["missed","Ones I got wrong last time"],["unseen","Ones I haven’t tried"]]),
+    h("label", { class:"check" }, h("input", { type:"checkbox", checked: st.keepSets, onchange:e=>{ st.keepSets = e.target.checked; } }),
+      h("span", null, "Keep linked questions together", h("br"), h("span", { class:"small muted" }, "Questions that share a paragraph stay in order, e.g. “Paragraph for Questions 7–15”."))),
+    h("label", { class:"check" }, h("input", { type:"checkbox", checked: st.shuffleOpts, onchange:e=>{ st.shuffleOpts = e.target.checked; } }),
+      h("span", null, "Shuffle the options", h("br"), h("span", { class:"small muted" }, "Options like “All of the above” or “Information is not sufficient” stay last."))),
+    h("label", { class:"field" }, h("span", null, "How many questions"), countIn)
+  ));
+  root.append(h("div", { class:"row" },
+    h("button", { class:"btn primary", disabled: !pool.length, onclick:()=>startSession(poolFor(st), st) }, pool.length ? `Start ${Math.min(pool.length, Number(st.count)||pool.length)} questions` : "No questions match"),
+  ));
+  return root;
+}
+function buildItem(entry, shuffleOpts){
+  const q = entry.q;
+  let order = null;
+  if (q.type !== "numeric"){
+    const idx = q.options.map((_,i)=>i);
+    if (shuffleOpts){
+      const anchored = idx.filter(i => ANCHOR.test(q.options[i]));
+      const free = idx.filter(i => !ANCHOR.test(q.options[i]));
+      order = shuffle(free).concat(anchored);
+    } else order = idx;
+  }
+  return { bankId: entry.bankId, q, order, resp: q.type === "numeric" ? "" : [], checked:false };
+}
+function startSession(pool, st){
+  let list;
+  if (st.order !== "shuffle") list = pool;
+  else if (!st.keepSets) list = shuffle(pool);
+  else {
+    const units = new Map();
+    for (const e of pool){ const k = e.q.set ? e.bankId + "|" + e.q.set : "solo|" + e.bankId + "|" + e.q.id; if (!units.has(k)) units.set(k, []); units.get(k).push(e); }
+    list = shuffle([...units.values()]).flatMap(u => u.sort((a, b) => (a.q.seq || 0) - (b.q.seq || 0)));
+  }
+  const n = Math.min(list.length, Number(st.count) || list.length);
+  list = list.slice(0, n);
+  S.session = { items: list.map(e => buildItem(e, st.shuffleOpts)), idx: 0, mode: st.feedback, started: Date.now(), finished:false, settings: st };
+  go("quiz");
+}
+
+/* ---------- quiz ---------- */
+function recordStat(item){
+  const st = S.stats[item.bankId] || (S.stats[item.bankId] = { kind:"stats", bankId:item.bankId, q:{} });
+  st.q = st.q || {};
+  const s = st.q[item.q.id] || { seen:0, right:0 };
+  if (hasKey(item.q)){
+    const ok = isCorrect(item.q, item.resp);
+    s.seen++; if (ok) s.right++; s.lastRight = ok; s.last = Date.now();
+    st.q[item.q.id] = s;
+    store.saveStats(item.bankId);
+  }
+}
+function viewQuiz(){
+  const ss = S.session;
+  if (!ss) return viewSetup();
+  const item = ss.items[ss.idx]; const q = item.q;
+  const total = ss.items.length;
+  const bank = S.banks[item.bankId];
+  const instant = ss.mode === "instant";
+  const locked = instant && item.checked;
+  const root = h("div");
+
+  root.append(
+    h("div", { class:"qhead" },
+      h("span", { class:"qnum" }, `Question ${ss.idx+1} of ${total}`),
+      h("span", { class:"small muted" }, [bank ? bank.name : "", q.group].filter(Boolean).join(", "))),
+    h("div", { class:"progress", role:"progressbar", "aria-valuemin":"0", "aria-valuemax":String(total), "aria-valuenow":String(ss.idx+1) }, h("i", { style:`width:${(ss.idx+1)/total*100}%` }))
+  );
+  const card = h("div", { class:"panel" });
+  if (q.passage){
+    const long = q.passage.length > 600;
+    card.append(long
+      ? h("details", { class:"passage", open:true }, h("summary", null, "Passage"), h("div", { style:"margin-top:.5rem" }, q.passage))
+      : h("div", { class:"passage" }, q.passage));
+  }
+  if (q.images && q.images.length){
+    const box = h("div", { class:"qimgs" });
+    q.images.forEach((src, k) => box.append(figure(src, `Figure ${k+1}`)));
+    card.append(box);
+  }
+  card.append(h("div", { class:"qtext" }, q.text));
+  if (q.type === "multi") card.append(h("p", { class:"small muted", style:"margin-top:-.6rem" }, "Select all that apply."));
+
+  if (q.type === "numeric"){
+    const input = h("input", { type:"text", inputmode:"decimal", value:item.resp, disabled:locked, placeholder:"Your answer", "aria-label":"Your answer", style:"max-width:14rem",
+      oninput:e=>{ item.resp = e.target.value.trim(); updateButtons(); },
+      onkeydown:e=>{ if (e.key === "Enter"){ e.preventDefault(); primaryAction(); } } });
+    card.append(input);
+    if (locked && hasKey(q)) card.append(h("p", { class:"small" }, "Correct answer: ", h("strong", null, String(q.answer))));
+    setTimeout(()=>{ if (!locked) input.focus(); }, 0);
+  } else {
+    const opts = h("div", { class:"opts", role: q.type==="multi" ? "group" : "radiogroup", "aria-label":"Options" });
+    item.order.forEach((orig, pos) => {
+      const chosen = item.resp.includes(orig);
+      let cls = "opt" + (q.type === "multi" ? " multi" : "");
+      if (locked && hasKey(q)){
+        if (q.answer.includes(orig)) cls += " is-right";
+        else if (chosen) cls += " is-wrong";
+      }
+      opts.append(h("button", { class:cls, role: q.type==="multi" ? "checkbox" : "radio", "aria-checked": String(chosen && !(locked && hasKey(q))), disabled:locked,
+        onclick:()=>pick(orig) },
+        h("span", { class:"bubble", "aria-hidden":"true" }, LETTERS[pos]),
+        h("span", { class:"txt" }, q.options[orig])));
+    });
+    card.append(opts);
+  }
+
+  if (locked){
+    if (!hasKey(q)){
+      card.append(h("div", { class:"verdict none" }, h("strong", null, "No answer key for this one."), " ",
+        answered(q, item.resp) ? h("button", { class:"btn small", style:"margin-left:.4rem", onclick:()=>saveAsKey(item) }, "My answer is right — save it as the key") : null));
+    } else {
+      const ok = isCorrect(q, item.resp);
+      card.append(h("div", { class:"verdict " + (ok ? "ok" : "bad") },
+        h("strong", null, ok ? "Correct." : (answered(q, item.resp) ? "Not quite." : "Skipped.")),
+        !ok && q.type !== "numeric" ? " The answer is " + q.answer.map(a => LETTERS[item.order.indexOf(a)]).join(", ") + "." : "",
+        q.explanation ? h("div", { style:"margin-top:.4rem;white-space:pre-wrap" }, q.explanation) : null));
+    }
+  }
+
+  const foot = h("div", { class:"qfoot" });
+  const mainBtn = h("button", { class:"btn primary", id:"mainBtn", onclick:primaryAction });
+  if (!instant && ss.idx > 0) foot.append(h("button", { class:"btn", onclick:()=>{ ss.idx--; render(); } }, "Previous"));
+  foot.append(mainBtn);
+  if (instant && !locked) foot.append(h("button", { class:"btn ghost", onclick:()=>{ item.checked = true; recordStat(item); render(); } }, "Skip and show answer"));
+  foot.append(h("span", { class:"spacer" }));
+  foot.append(h("button", { class:"btn ghost", onclick:()=>finish() }, instant ? "End session" : "Submit now"));
+  card.append(foot);
+  root.append(card);
+
+  if (!instant){
+    const pal = h("div", { class:"palette", "aria-label":"Jump to question" });
+    ss.items.forEach((it, i) => pal.append(h("button", { class:(answered(it.q, it.resp) ? "answered " : "") + (i===ss.idx ? "current" : ""), "aria-label":`Question ${i+1}`, onclick:()=>{ ss.idx = i; render(); } }, String(i+1))));
+    root.append(pal);
+  }
+  root.append(h("p", { class:"kbd" }, q.type === "numeric" ? "Press Enter to continue." : "Keys: A–" + LETTERS[Math.max(0,(q.options||[]).length-1)] + " or 1–" + (q.options||[]).length + " to choose, Enter to continue."));
+
+  function updateButtons(){
+    const has = answered(q, item.resp);
+    if (instant){
+      mainBtn.textContent = locked ? (ss.idx === total-1 ? "See results" : "Next question") : "Check answer";
+      mainBtn.disabled = !locked && !has;
+    } else {
+      mainBtn.textContent = ss.idx === total-1 ? "Submit" : "Next";
+      mainBtn.disabled = false;
+    }
+  }
+  updateButtons();
+  return root;
+}
+function pick(orig){
+  const ss = S.session; const item = ss.items[ss.idx];
+  if (ss.mode === "instant" && item.checked) return;
+  if (item.q.type === "multi") item.resp = item.resp.includes(orig) ? item.resp.filter(x=>x!==orig) : item.resp.concat(orig);
+  else item.resp = [orig];
+  render();
+}
+function primaryAction(){
+  const ss = S.session; if (!ss || S.view !== "quiz") return;
+  const item = ss.items[ss.idx];
+  if (ss.mode === "instant"){
+    if (!item.checked){ if (!answered(item.q, item.resp)) return; item.checked = true; recordStat(item); render(); return; }
+    if (ss.idx === ss.items.length-1) return finish();
+    ss.idx++; render(); window.scrollTo(0,0); return;
+  }
+  if (ss.idx === ss.items.length-1){ const left = ss.items.filter(it=>!answered(it.q,it.resp)).length; if (left && !confirm(`${left} question${left===1?"":"s"} unanswered. Submit anyway?`)) return; return finish(); }
+  ss.idx++; render(); window.scrollTo(0,0);
+}
+function saveAsKey(item){
+  const b = S.banks[item.bankId]; if (!b) return;
+  const q = b.questions.find(x=>x.id===item.q.id); if (!q) return;
+  if (q.type === "numeric") q.answer = Number(item.resp);
+  else { q.answer = [...item.resp].sort((a,b)=>a-b); if (q.answer.length > 1) q.type = "multi"; }
+  item.q = q; store.saveBank(b); recordStat(item); render();
+}
+function finish(){
+  const ss = S.session;
+  if (ss.mode === "exam") ss.items.forEach(it => { if (!it.checked){ it.checked = true; recordStat(it); } });
+  ss.finished = true; ss.ended = Date.now();
+  const touched = new Set(ss.items.map(i=>i.bankId));
+  touched.forEach(id => store.saveStats(id));
+  recordSession(ss);
+  go("results");
+}
+document.addEventListener("keydown", e => {
+  if (S.view !== "quiz" || !S.session) return;
+  if (e.target.matches("input,textarea,select")) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const item = S.session.items[S.session.idx];
+  if (e.key === "Enter"){ e.preventDefault(); primaryAction(); return; }
+  if (item.q.type === "numeric") return;
+  let pos = -1;
+  if (/^[1-9]$/.test(e.key)) pos = Number(e.key) - 1;
+  else if (/^[a-z]$/i.test(e.key)) pos = LETTERS.indexOf(e.key.toUpperCase());
+  if (pos >= 0 && pos < item.order.length){ e.preventDefault(); pick(item.order[pos]); }
+});
+
+/* ---------- history ---------- */
+const HISTORY_MAX = 300;
+function recordSession(ss){
+  const items = ss.items.map(it => ({
+    bankId: it.bankId, qid: it.q.id,
+    resp: it.q.type === "numeric" ? (it.resp === "" ? null : it.resp) : (it.resp || []).slice(),
+    ok: hasKey(it.q) ? isCorrect(it.q, it.resp) : null,
+    answered: answered(it.q, it.resp), checked: !!it.checked
+  })).filter(x => x.checked);
+  if (!items.length) return null;
+  const subjects = [...new Set(ss.items.map(i => S.banks[i.bankId] ? S.banks[i.bankId].name : "Deleted subject"))];
+  const weeks = [...new Set(ss.items.map(i => (S.banks[i.bankId] ? S.banks[i.bankId].name : "") + ": " + (weekName(i.q) || NO_WEEK)))].sort(weekSort);
+  const keyed = items.filter(x => x.ok !== null);
+  const rec = {
+    id: "s" + Date.now().toString(36) + uid().slice(0,3), at: ss.started, ended: ss.ended || Date.now(),
+    mode: ss.mode, subjects, weeks, total: items.length,
+    answered: items.filter(x => x.answered).length, keyed: keyed.length, right: keyed.filter(x => x.ok).length, items
+  };
+  S.history = [rec].concat(S.history || []).slice(0, HISTORY_MAX);
+  store.saveHistory();
+  sheet.logSession(rec);
+  return rec;
+}
+const fmtDate = t => new Date(t).toLocaleString(undefined, { day:"numeric", month:"short", year:"numeric", hour:"numeric", minute:"2-digit" });
+const pctOf = (a, b) => b ? Math.round(a / b * 100) : 0;
+function findQ(bankId, qid){ const b = S.banks[bankId]; return b ? b.questions.find(q => q.id === qid) || null : null; }
+function respLabel(q, resp){
+  if (resp == null || (Array.isArray(resp) && !resp.length)) return "skipped";
+  if (q.type === "numeric") return String(resp);
+  return resp.map(a => `${LETTERS[a]}. ${q.options[a] != null ? q.options[a] : "?"}`).join("; ");
+}
+function keyLabel(q){ return !hasKey(q) ? "no key" : q.type === "numeric" ? String(q.answer) : q.answer.map(a => `${LETTERS[a]}. ${q.options[a]}`).join("; "); }
+function practiceEntries(entries, label){
+  const st = Object.assign({}, S.setup || {}, { order:"shuffle", feedback:(S.setup && S.setup.feedback) || "instant", shuffleOpts: !S.setup || S.setup.shuffleOpts !== false, keepSets:false, banks:new Set(entries.map(e=>e.bankId)), groups:null, focus:"all", count:"" });
+  S.setup = st;
+  S.session = { items: shuffle(entries).map(e => buildItem(e, st.shuffleOpts)), idx:0, mode: st.feedback, started: Date.now(), finished:false, settings: st, label, entries };
+  go("quiz");
+}
+
+/* ---------- stats view ---------- */
+function viewStats(){
+  const hist = S.history || [];
+  const root = h("div", { class:"stack" }, h("h1", null, "Stats"));
+  const ids = sortedSubjects();
+  if (!hist.length && !ids.length){
+    root.append(h("div", { class:"empty stack" }, h("h2", null, "Nothing yet"), h("p", { class:"muted" }, "Your sessions and scores show up here once you’ve practiced.")));
+    return root;
+  }
+  // totals
+  const ans = hist.reduce((n, r) => n + r.keyed, 0), right = hist.reduce((n, r) => n + r.right, 0);
+  const mins = Math.round(hist.reduce((n, r) => n + Math.max(0, r.ended - r.at), 0) / 60000);
+  root.append(h("div", { class:"panel totals" },
+    h("div", null, h("b", null, String(hist.length)), h("span", null, `session${hist.length===1?"":"s"}`)),
+    h("div", null, h("b", null, String(ans)), h("span", null, "answers checked")),
+    h("div", null, h("b", null, ans ? pctOf(right, ans) + "%" : "–"), h("span", null, "right overall")),
+    h("div", null, h("b", null, mins >= 60 ? `${Math.floor(mins/60)} h ${mins%60} m` : `${mins} m`), h("span", null, "practicing"))));
+
+  // trend
+  if (hist.length > 1){
+    const last = hist.slice(0, 24).reverse();
+    const W = 640, H = 150, pad = 24, bw = (W - pad) / last.length;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H + 18}`); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Scores of your recent sessions");
+    svg.classList.add("trend");
+    const mk = (tag, a) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in a) e.setAttribute(k, a[k]); return e; };
+    [0, 50, 100].forEach(v => { const y = H - v / 100 * (H - 10); svg.append(mk("line", { x1:pad, x2:W, y1:y, y2:y, class:"grid" })); const t = mk("text", { x:0, y:y+4, class:"axis" }); t.textContent = v + "%"; svg.append(t); });
+    last.forEach((r, i) => {
+      const p = r.keyed ? r.right / r.keyed : 0, hh = Math.max(2, p * (H - 10));
+      const rect = mk("rect", { x: pad + i * bw + bw * .15, y: H - hh, width: bw * .7, height: hh, rx: 3, class: p >= .8 ? "hi" : p >= .5 ? "mid" : "lo" });
+      const t = mk("title", {}); t.textContent = `${fmtDate(r.at)}: ${r.right}/${r.keyed} (${pctOf(r.right, r.keyed)}%)`; rect.append(t);
+      svg.append(rect);
+    });
+    root.append(h("div", { class:"panel" }, h("h2", null, "Recent scores"), h("p", { class:"small muted", style:"margin:.2rem 0 .6rem" }, `Your last ${last.length} sessions, oldest on the left.`), h("div", { class:"chartbox" }, svg)));
+  }
+
+  // by subject and week
+  if (ids.length){
+    const panel = h("div", { class:"panel" }, h("h2", null, "By subject and week"),
+      h("p", { class:"small muted", style:"margin:.2rem 0 .6rem" }, "Tried: questions attempted at least once. Last try: right the most recent time you saw them."));
+    for (const id of ids){
+      const b = S.banks[id]; const st = (S.stats[id] && S.stats[id].q) || {};
+      const tbl = h("table", { class:"wk" }, h("thead", null, h("tr", null, h("th", null, "Week"), h("th", null, "Tried"), h("th", null, "Last try"), h("th", null, "All attempts"), h("th", null, ""))));
+      const tb = h("tbody");
+      for (const w of weeksOf(b)){
+        let tried = 0, lastRight = 0, seen = 0, rt = 0; const missed = [];
+        for (const q of w.questions){ const s = st[q.id]; if (s && s.seen){ tried++; seen += s.seen; rt += s.right; if (s.lastRight) lastRight++; else missed.push({ bankId:id, q }); } }
+        tb.append(h("tr", null,
+          h("td", null, w.name || NO_WEEK),
+          h("td", null, `${tried}/${w.questions.length}`),
+          h("td", null, tried ? h("span", { class:"pill " + (lastRight/tried >= .8 ? "hi" : lastRight/tried >= .5 ? "mid" : "lo") }, `${pctOf(lastRight, tried)}%`) : "–"),
+          h("td", { class:"muted" }, seen ? `${rt}/${seen}` : "–"),
+          h("td", null, missed.length ? h("button", { class:"btn small", onclick:()=>practiceEntries(missed, `${b.name}, ${w.name} missed`) }, `Redo ${missed.length} missed`) : null)));
+      }
+      tbl.append(tb);
+      panel.append(h("h3", { style:"margin-top:1rem" }, b.name), h("div", { class:"tablebox" }, tbl));
+    }
+    root.append(panel);
+  }
+
+  // most missed
+  const missed = [];
+  for (const id of ids){ const st = (S.stats[id] && S.stats[id].q) || {}; for (const q of S.banks[id].questions){ const s = st[q.id]; if (s && s.seen > s.right) missed.push({ bankId:id, q, wrong: s.seen - s.right, seen: s.seen }); } }
+  missed.sort((a, b) => b.wrong - a.wrong || (a.seen - a.wrong) - (b.seen - b.wrong));
+  if (missed.length){
+    const top = missed.slice(0, 10);
+    root.append(h("div", { class:"panel" },
+      h("div", { class:"row" }, h("h2", null, "Most missed"), h("span", { class:"spacer" }), h("button", { class:"btn primary small", onclick:()=>practiceEntries(top.map(m => ({ bankId:m.bankId, q:m.q })), "Most missed") }, `Practice these ${top.length}`)),
+      h("ul", { class:"qlist" }, top.map(m => h("li", null,
+        h("span", { class:"tag" }, `${m.wrong}×`),
+        h("div", { class:"t" }, h("div", null, m.q.text.length > 160 ? m.q.text.slice(0,160) + "…" : m.q.text),
+          h("div", { class:"small muted" }, `${S.banks[m.bankId].name}, ${weekName(m.q) || NO_WEEK}: wrong ${m.wrong} of ${m.seen}`)))))));
+  }
+
+  // history
+  if (hist.length){
+    const list = h("ul", { class:"hist" });
+    hist.slice(0, 100).forEach(r => list.append(h("li", null,
+      h("button", { class:"histrow", onclick:()=>{ S.histId = r.id; go("session"); } },
+        h("span", { class:"hdate" }, fmtDate(r.at)),
+        h("span", { class:"hwhat" }, r.weeks.length <= 3 ? r.weeks.join(", ") : `${r.subjects.join(", ")} (${r.weeks.length} weeks)`),
+        h("span", { class:"hscore pill " + (r.keyed && r.right/r.keyed >= .8 ? "hi" : r.keyed && r.right/r.keyed >= .5 ? "mid" : "lo") }, r.keyed ? `${r.right}/${r.keyed}` : "–"),
+        h("span", { class:"small muted" }, r.mode === "exam" ? "Exam" : "Practice")))));
+    root.append(h("div", { class:"panel" }, h("h2", null, "History"), list,
+      hist.length > 100 ? h("p", { class:"small muted" }, `Showing the latest 100 of ${hist.length}.`) : null));
+  }
+  return root;
+}
+function viewSession(){
+  const r = (S.history || []).find(x => x.id === S.histId);
+  if (!r){ S.view = "stats"; return viewStats(); }
+  const root = h("div", { class:"stack" },
+    h("div", { class:"row" }, h("button", { class:"btn ghost", onclick:()=>go("stats") }, "‹ Stats")),
+    h("div", { class:"panel" },
+      h("div", { class:"score" }, `${r.right}/${r.keyed} `, h("small", null, `${pctOf(r.right, r.keyed)}%`)),
+      h("p", { class:"muted" }, `${fmtDate(r.at)}, ${r.mode === "exam" ? "exam mode" : "practice mode"}, ${fmtDur(r.ended - r.at)}.`),
+      h("p", { class:"small" }, r.weeks.join(", "))));
+  const live = r.items.map(it => ({ it, q: findQ(it.bankId, it.qid) }));
+  const avail = live.filter(x => x.q);
+  const wrong = avail.filter(x => x.it.ok === false);
+  root.append(h("div", { class:"row" },
+    h("button", { class:"btn primary", disabled: !avail.length, onclick:()=>practiceEntries(avail.map(x => ({ bankId:x.it.bankId, q:x.q })), "Retake") }, "Retake this session"),
+    wrong.length ? h("button", { class:"btn", onclick:()=>practiceEntries(wrong.map(x => ({ bankId:x.it.bankId, q:x.q })), "Retake missed") }, `Redo the ${wrong.length} missed`) : null,
+    h("span", { class:"spacer" }),
+    h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Delete this session from your history?")){ S.history = S.history.filter(x => x.id !== r.id); store.saveHistory(); go("stats"); } } }, "Delete from history")));
+  const rev = h("div", { class:"panel" }, h("h2", { style:"margin-bottom:.8rem" }, "Answers"),
+    h("p", { class:"small muted" }, "Letters are in the original order, as on the portal."));
+  live.forEach(({ it, q }, i) => {
+    if (!q){ rev.append(h("div", { class:"rev" }, h("div", { class:"small muted" }, `Question ${i+1}: this question has since been removed.`))); return; }
+    rev.append(h("div", { class:"rev " + (it.ok === null ? "" : it.ok ? "ok" : "bad") },
+      h("div", { class:"small muted" }, `Question ${i+1}, ${S.banks[it.bankId].name}, ${weekName(q) || NO_WEEK}`),
+      h("div", { class:"q" }, q.text),
+      h("div", { class:"small" }, h("strong", null, "You: "), respLabel(q, it.resp)),
+      it.ok === false ? h("div", { class:"small" }, h("strong", null, "Answer: "), keyLabel(q)) : null));
+  });
+  root.append(rev);
+  return root;
+}
+
+/* ---------- Google Sheet ---------- */
+const SHEET_CFG = "drill:sheet", SHEET_QUEUE = "drill:sheetQueue";
+const sheet = {
+  cfg: (() => { try { return JSON.parse(localStorage.getItem(SHEET_CFG) || "null") || {}; } catch(e){ return {}; } })(),
+  timer: null, busy: false, status: "",
+  get on(){ return !!(this.cfg.url && this.cfg.token); },
+  saveCfg(){ try { localStorage.setItem(SHEET_CFG, JSON.stringify(this.cfg)); } catch(e){} },
+  queue(){ try { return JSON.parse(localStorage.getItem(SHEET_QUEUE) || "[]"); } catch(e){ return []; } },
+  setQueue(q){ try { localStorage.setItem(SHEET_QUEUE, JSON.stringify(q.slice(-200))); } catch(e){} },
+  async call(payload, method){
+    const body = JSON.stringify(Object.assign({ token: this.cfg.token }, payload));
+    let res;
+    if (method === "GET"){
+      const u = this.cfg.url + (this.cfg.url.includes("?") ? "&" : "?") + "action=" + encodeURIComponent(payload.action) + "&token=" + encodeURIComponent(this.cfg.token);
+      res = await fetch(u, { redirect:"follow" });
+    } else {
+      res = await fetch(this.cfg.url, { method:"POST", body, redirect:"follow" }); // text/plain: no preflight
+    }
+    const text = await res.text();
+    let j; try { j = JSON.parse(text); } catch(e){ throw new Error(/<html/i.test(text) ? "The Sheet answered with a web page, not data. Check the web app is deployed with access set to “Anyone”." : "Unexpected reply from the Sheet."); }
+    if (!j.ok) throw new Error(j.error === "bad token" ? "The key doesn’t match the one in the script." : (j.error || "The Sheet refused the request."));
+    return j;
+  },
+  state(){ return { version:1, savedAt: Date.now(), banks: S.banks, stats: S.stats, history: S.history || [] }; },
+  scheduleBackup(){
+    if (!this.on || this.cfg.auto === false) return;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.backup(true), 4000);
+  },
+  async backup(quiet){
+    if (!this.on) return false;
+    if (!Object.keys(S.banks).length && !(S.history || []).length){ if (!quiet) this.status = "Nothing here to back up yet. Use “Get my data from the Sheet” first."; if (S.view === "sheet") render(); return false; }
+    try {
+      await this.flush();
+      await this.call({ action:"saveState", state: this.state() });
+      this.cfg.lastBackup = Date.now(); this.cfg.lastError = ""; this.saveCfg();
+      if (!quiet) this.status = "Backed up to your Sheet.";
+      return true;
+    } catch(e){
+      this.cfg.lastError = e.message || "Couldn’t reach the Sheet."; this.saveCfg();
+      if (!quiet) this.status = this.cfg.lastError;
+      return false;
+    } finally { if (S.view === "sheet") render(); }
+  },
+  async logSession(rec){
+    if (!this.on) return;
+    const rows = rec.items.map((it, i) => {
+      const q = findQ(it.bankId, it.qid); const b = S.banks[it.bankId];
+      return { n: i + 1, subject: b ? b.name : "", week: q ? weekName(q) : "", question: q ? q.text.replace(/\s+/g, " ").slice(0, 300) : "(removed)",
+        yours: q ? respLabel(q, it.resp) : "", correct: q ? keyLabel(q) : "", result: it.ok === null ? (it.answered ? "No key" : "Skipped") : it.ok ? "Right" : (it.answered ? "Wrong" : "Skipped") };
+    });
+    const session = { id: rec.id, date: new Date(rec.at).toISOString(), subjects: rec.subjects.join(", "), weeks: rec.weeks.join(", "), mode: rec.mode === "exam" ? "Exam" : "Practice",
+      questions: rec.total, answered: rec.answered, right: rec.right, checked: rec.keyed, percent: pctOf(rec.right, rec.keyed), minutes: Math.round((rec.ended - rec.at) / 6000) / 10 };
+    const q = this.queue(); q.push({ action:"logSession", session, answers: rows }); this.setQueue(q);
+    await this.flush();
+    this.scheduleBackup();
+  },
+  async flush(){
+    if (!this.on || this.busy) return;
+    this.busy = true;
+    try {
+      let q = this.queue();
+      while (q.length){
+        await this.call(q[0]);
+        q = this.queue(); q.shift(); this.setQueue(q);
+      }
+    } catch(e){ this.cfg.lastError = e.message || "Couldn’t reach the Sheet."; this.saveCfg(); }
+    finally { this.busy = false; }
+  },
+  async restore(){
+    const j = await this.call({ action:"load" }, "GET");
+    if (!j.state || !j.state.banks) throw new Error("The Sheet has no backup yet.");
+    return j.state;
+  }
+};
+window.addEventListener("online", () => sheet.flush());
+
+function sheetScript(token){
+  return `// Drill sync for Google Sheets. Paste into Extensions → Apps Script, then Deploy → New deployment → Web app.
+const KEY = '${token}';
+
+function doGet(e) { return handle_(e.parameter || {}); }
+function doPost(e) {
+  let body = {};
+  try { body = JSON.parse(e.postData.contents); } catch (err) {}
+  return handle_(body);
+}
+
+function handle_(p) {
+  if (p.token !== KEY) return out_({ ok: false, error: 'bad token' });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (p.action === 'ping') return out_({ ok: true, name: ss.getName() });
+    if (p.action === 'saveState') { saveState_(ss, p.state); return out_({ ok: true }); }
+    if (p.action === 'load') return out_({ ok: true, state: loadState_(ss) });
+    if (p.action === 'logSession') { logSession_(ss, p.session, p.answers || []); return out_({ ok: true }); }
+    return out_({ ok: false, error: 'unknown action' });
+  } finally { lock.releaseLock(); }
+}
+
+function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+function tab_(ss, name, header) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    if (header) { sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold'); sh.setFrozenRows(1); }
+  }
+  return sh;
+}
+
+function logSession_(ss, s, answers) {
+  const sessions = tab_(ss, 'Sessions', ['Session', 'Date', 'Subjects', 'Weeks', 'Mode', 'Questions', 'Answered', 'Right', 'Checked', 'Percent', 'Minutes']);
+  if (sessions.getLastRow() > 1 && sessions.getRange(2, 1, sessions.getLastRow() - 1, 1).createTextFinder(s.id).matchEntireCell(true).findNext()) return; // already logged
+  sessions.appendRow([s.id, new Date(s.date), s.subjects, s.weeks, s.mode, s.questions, s.answered, s.right, s.checked, s.percent / 100, s.minutes]);
+  sessions.getRange(sessions.getLastRow(), 10).setNumberFormat('0%');
+  const ans = tab_(ss, 'Answers', ['Session', 'Date', 'Subject', 'Week', '#', 'Question', 'Your answer', 'Correct answer', 'Result']);
+  if (answers.length) {
+    const rows = answers.map(a => [s.id, new Date(s.date), a.subject, a.week, a.n, a.question, a.yours, a.correct, a.result]);
+    ans.getRange(ans.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+}
+
+function saveState_(ss, state) {
+  const json = JSON.stringify(state);
+  const size = 45000, parts = [];
+  for (let i = 0; i < json.length; i += size) parts.push([parts.length + 1, json.slice(i, i + size)]);
+  const data = tab_(ss, 'Backup', ['Part', 'Data (used by Drill to restore, do not edit)']);
+  if (data.getLastRow() > 1) data.getRange(2, 1, data.getLastRow() - 1, 2).clearContent();
+  data.getRange(2, 1, parts.length, 2).setValues(parts);
+  data.getRange(1, 4, 1, 2).setValues([['Last backup', new Date()]]);
+
+  // a readable copy of every question, for browsing in the Sheet
+  const qs = tab_(ss, 'Questions', ['Subject', 'Week', '#', 'Question', 'Options', 'Answer', 'Times seen', 'Times right']);
+  if (qs.getLastRow() > 1) qs.getRange(2, 1, qs.getLastRow() - 1, 8).clearContent();
+  const rows = [];
+  Object.keys(state.banks || {}).forEach(id => {
+    const b = state.banks[id], st = ((state.stats || {})[id] || {}).q || {};
+    (b.questions || []).forEach((q, i) => {
+      const opts = (q.options || []).map((o, k) => String.fromCharCode(65 + k) + '. ' + o).join('\\n');
+      const ans = q.answer == null ? '' : Array.isArray(q.answer) ? q.answer.map(k => String.fromCharCode(65 + k)).join(', ') : String(q.answer);
+      const s = st[q.id] || {};
+      rows.push([b.name, q.group || '', i + 1, String(q.text).slice(0, 49000), opts.slice(0, 49000), ans, s.seen || 0, s.right || 0]);
+    });
+  });
+  if (rows.length) qs.getRange(2, 1, rows.length, 8).setValues(rows);
+}
+
+function loadState_(ss) {
+  const data = ss.getSheetByName('Backup');
+  if (!data || data.getLastRow() < 2) return null;
+  const parts = data.getRange(2, 1, data.getLastRow() - 1, 2).getValues().filter(r => r[1] !== '').sort((a, b) => a[0] - b[0]);
+  return JSON.parse(parts.map(r => r[1]).join(''));
+}
+`;
+}
+
+function viewSheet(){
+  const c = sheet.cfg;
+  if (!c.token) { c.token = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join(""); sheet.saveCfg(); }
+  const root = h("div", { class:"stack" }, h("h1", null, "Google Sheet"));
+  if (sheet.on){
+    root.append(h("div", { class:"panel stack" },
+      h("h2", null, "Connected"),
+      h("p", { class:"small muted", style:"margin:0" }, c.sheetName ? `Sheet: ${c.sheetName}. ` : "", c.lastBackup ? `Last backup ${fmtDate(c.lastBackup)}.` : "Not backed up yet."),
+      c.lastError ? h("p", { class:"status err", style:"margin:0" }, "Last problem: " + c.lastError) : null,
+      sheet.queue().length ? h("p", { class:"small muted", style:"margin:0" }, `${sheet.queue().length} session${sheet.queue().length===1?"":"s"} waiting to be sent.`) : null,
+      h("label", { class:"check" }, h("input", { type:"checkbox", checked: c.auto !== false, onchange:e=>{ c.auto = e.target.checked; sheet.saveCfg(); } }),
+        h("span", null, "Back up automatically", h("br"), h("span", { class:"small muted" }, "After each session and whenever you add or change questions."))),
+      h("div", { class:"row" },
+        h("button", { class:"btn primary", disabled: sheet.busy, onclick:async e=>{ e.target.disabled = true; e.target.textContent = "Backing up…"; await sheet.backup(false); } }, "Back up now"),
+        h("button", { class:"btn", onclick:doRestore }, "Get my data from the Sheet"),
+        h("span", { class:"spacer" }),
+        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Disconnect from the Sheet? Nothing is deleted from it.")){ sheet.cfg = { token: c.token }; sheet.saveCfg(); sheet.status = ""; render(); } } }, "Disconnect")),
+      h("p", { class:"status" + (/couldn|refused|doesn|answered|no backup|unexpected|failed/i.test(sheet.status) ? " err" : "") }, sheet.status)));
+    root.append(h("p", { class:"small muted" }, "The Sheet gets three tabs: Sessions (one row per session), Answers (one row per question you answered) and Questions (every question with its key). Figures you pasted stay in this browser; use Export backup for those."));
+    return root;
+  }
+  const urlIn = h("input", { type:"text", value: c.pendingUrl || "", placeholder:"https://script.google.com/macros/s/…/exec", "aria-label":"Web app URL", oninput:e=>{ c.pendingUrl = e.target.value.trim(); } });
+  const code = sheetScript(c.token);
+  root.append(
+    h("p", { class:"muted" }, "Connect a Google Sheet of your own to keep a log of every session and a backup of all your subjects. It takes about five minutes, once."),
+    h("div", { class:"panel stack" },
+      h("h2", null, "Set it up"),
+      h("ol", { class:"steps" },
+        h("li", null, "Create a new Google Sheet (sheets.new), named e.g. “Drill”."),
+        h("li", null, "In the Sheet: Extensions → Apps Script. Delete what’s there and paste the script below. Save."),
+        h("li", null, "Deploy → New deployment → gear icon → Web app. Set “Execute as” to Me and “Who has access” to Anyone. Click Deploy and allow access when Google asks."),
+        h("li", null, "Copy the Web app URL (ends in /exec) and paste it here.")),
+      h("div", { class:"row" }, h("button", { class:"btn", onclick:e=>{ navigator.clipboard.writeText(code).then(()=>{ e.target.textContent = "Script copied"; }).catch(()=>{ e.target.textContent = "Select the text below and copy it"; }); } }, "Copy script"),
+        h("span", { class:"small muted" }, "It already contains your private key.")),
+      h("details", null, h("summary", { class:"small" }, "Show the script"), h("pre", { class:"code" }, code)),
+      h("label", { class:"field" }, h("span", null, "Web app URL"), urlIn),
+      h("div", { class:"row" }, h("button", { class:"btn primary", onclick:async e=>{
+        const u = (c.pendingUrl || "").trim();
+        if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/i.test(u)){ sheet.status = "That doesn’t look like an Apps Script web app URL. It should start with https://script.google.com/macros/s/ and end in /exec."; render(); return; }
+        e.target.disabled = true; e.target.textContent = "Connecting…";
+        c.url = u;
+        try {
+          const j = await sheet.call({ action:"ping" }); c.sheetName = j.name; c.auto = true; delete c.pendingUrl; sheet.saveCfg();
+          sheet.status = "Connected. Checking the Sheet for your data…"; render();
+          let remote = null; try { remote = await sheet.restore(); } catch(err){}
+          let msg = "Connected.";
+          if (remote){ const { addedQ, addedS } = mergeState(remote); if (addedQ || addedS) msg = `Connected, and brought in ${addedQ} question${addedQ===1?"":"s"} and ${addedS} session${addedS===1?"":"s"} from the Sheet.`; }
+          const ok = await sheet.backup(true);
+          sheet.status = msg + (ok ? " Backed up." : ""); render();
+        }
+        catch(err){ c.url = ""; sheet.saveCfg(); sheet.status = "Couldn’t connect: " + (err.message === "Failed to fetch" ? "the request was blocked. Check the URL, that access is set to Anyone, and that you’re using drill.html opened directly in Chrome." : err.message); render(); }
+      } }, "Connect")),
+      h("p", { class:"status err" }, sheet.status)));
+  return root;
+}
+function mergeState(remote){
+  // union of both sides; nothing on either side is lost
+  const r = remote || {}; let addedQ = 0, addedS = 0;
+  for (const [id, rb] of Object.entries(r.banks || {})){
+    const lb = S.banks[id];
+    if (!lb){ S.banks[id] = rb; addedQ += (rb.questions || []).length; continue; }
+    const have = new Set(lb.questions.map(q => q.id));
+    for (const q of rb.questions || []) if (!have.has(q.id)){ lb.questions.push(q); addedQ++; }
+  }
+  for (const [id, rs] of Object.entries(r.stats || {})){
+    const ls = S.stats[id] || (S.stats[id] = { kind:"stats", bankId:id, q:{} });
+    ls.q = ls.q || {};
+    for (const [qid, v] of Object.entries(rs.q || {})){ const mine = ls.q[qid]; if (!mine || (v.seen || 0) > (mine.seen || 0) || ((v.seen||0) === (mine.seen||0) && (v.last||0) > (mine.last||0))) ls.q[qid] = v; }
+  }
+  const ids = new Set((S.history || []).map(x => x.id));
+  for (const hrec of r.history || []) if (!ids.has(hrec.id)){ (S.history = S.history || []).push(hrec); addedS++; }
+  S.history = (S.history || []).sort((a, b) => b.at - a.at).slice(0, HISTORY_MAX);
+  for (const bk of Object.values(S.banks)) store.saveBank(bk);
+  for (const id of Object.keys(S.stats)) store.saveStats(id);
+  store.saveHistory();
+  return { addedQ, addedS };
+}
+async function doRestore(){
+  try {
+    sheet.status = "Fetching your data from the Sheet…"; render();
+    let st = null;
+    try { st = await sheet.restore(); } catch(e){ if (/no backup/i.test(e.message)) st = null; else throw e; }
+    if (!st){ sheet.status = "The Sheet has no backup yet."; render(); return; }
+    const { addedQ, addedS } = mergeState(st);
+    sheet.status = addedQ || addedS ? `Got ${addedQ} question${addedQ===1?"":"s"} and ${addedS} session${addedS===1?"":"s"} from the Sheet. Everything here was kept too.` : "Already up to date with the Sheet.";
+    render();
+  } catch(e){ sheet.status = "Couldn’t get your data: " + e.message; render(); }
+}
+/* ---------- results ---------- */
+function fmtDur(ms){ const s = Math.round(ms/1000); const m = Math.floor(s/60); return m ? `${m} min ${s%60} s` : `${s} s`; }
+function viewResults(){
+  const ss = S.session; if (!ss) return viewLibrary();
+  const keyed = ss.items.filter(it => hasKey(it.q));
+  const right = keyed.filter(it => isCorrect(it.q, it.resp));
+  const wrong = ss.items.filter(it => hasKey(it.q) && !isCorrect(it.q, it.resp));
+  const pct = keyed.length ? Math.round(right.length / keyed.length * 100) : 0;
+  const root = h("div", { class:"stack" },
+    h("div", { class:"panel" },
+      h("div", { class:"score" }, `${right.length}/${keyed.length} `, h("small", null, `${pct}%`)),
+      h("p", { class:"muted" }, `Finished in ${fmtDur(ss.ended - ss.started)}.`,
+        ss.items.length > keyed.length ? ` ${ss.items.length - keyed.length} question${ss.items.length-keyed.length===1?" had":"s had"} no answer key and ${ss.items.length-keyed.length===1?"isn’t":"aren’t"} counted.` : ""),
+      h("div", { class:"row", style:"margin-top:.8rem" },
+        wrong.length ? h("button", { class:"btn primary", onclick:()=>{ S.session = { items: shuffle(wrong).map(it => buildItem({ bankId:it.bankId, q:it.q }, ss.settings.shuffleOpts)), idx:0, mode:ss.mode, started:Date.now(), finished:false, settings:ss.settings }; go("quiz"); } }, `Retry the ${wrong.length} I missed`) : null,
+        h("button", { class:"btn", onclick:()=> ss.entries ? practiceEntries(ss.entries, ss.label) : startSession(poolFor(ss.settings), ss.settings) }, "Same settings, new shuffle"),
+        h("button", { class:"btn ghost", onclick:()=>go("stats") }, "See stats"),
+        h("button", { class:"btn ghost", onclick:()=>go("setup") }, "Change settings"))
+    )
+  );
+  const rev = h("div", { class:"panel" }, h("h2", { style:"margin-bottom:.8rem" }, "Review"));
+  ss.items.forEach((it, i) => {
+    const q = it.q; const k = hasKey(q); const ok = k && isCorrect(q, it.resp);
+    const lab = v => q.type === "numeric" ? String(v) : v.map(a => `${LETTERS[it.order.indexOf(a)]}. ${q.options[a]}`).join("; ");
+    rev.append(h("div", { class:"rev " + (k ? (ok ? "ok" : "bad") : "") },
+      h("div", { class:"small muted" }, `Question ${i+1}`, q.group ? `, ${q.group}` : ""),
+      h("div", { class:"q" }, q.text),
+      h("div", { class:"small" }, h("strong", null, "You: "), answered(q, it.resp) ? lab(it.resp) : "skipped"),
+      k && !ok ? h("div", { class:"small" }, h("strong", null, "Answer: "), lab(q.answer)) : null,
+      !k ? h("div", { class:"small muted" }, "No answer key.") : null,
+      q.explanation && !ok ? h("div", { class:"small muted", style:"white-space:pre-wrap" }, q.explanation) : null
+    ));
+  });
+  root.append(rev);
+  return root;
+}
+
+/* ---------- import ---------- */
+function viewImport(){
+  const im = S.imp;
+  const ids = sortedSubjects();
+  if (!im.target || (im.target !== "__new" && !S.banks[im.target])) im.target = ids.length ? ids[0] : "__new";
+  const root = h("div", { class:"stack" }, h("h1", null, "Add questions"));
+
+  const sel = h("select", { "aria-label":"Subject", onchange:e=>{ im.target = e.target.value; im.preview = null; im.status = ""; render(); } },
+    ids.map(id => h("option", { value:id, selected: im.target===id }, S.banks[id].name)),
+    h("option", { value:"__new", selected: im.target==="__new" }, "New subject…"));
+  root.append(h("div", { class:"panel stack" },
+    h("h2", null, "1. Subject"),
+    sel,
+    im.target === "__new" ? h("input", { type:"text", value: im.newName, placeholder:"Subject name, e.g. Corporate Finance", "aria-label":"New subject name", oninput:e=>{ im.newName = e.target.value; } }) : null));
+
+  const ta = h("textarea", { "aria-label":"Portal response", spellcheck:"false", placeholder:'Paste the copied response here. It starts with {"availability": …', oninput:e=>{ im.json = e.target.value; } });
+  ta.value = im.json;
+  const fileIn = h("input", { type:"file", accept:".json,.har,.txt,application/json", multiple:true, class:"hidden", onchange:e=>{ readJsonFiles(e.target.files); e.target.value=""; } });
+  const drop = h("div", { class:"drop", tabindex:"0", role:"button", "aria-label":"Choose saved response files",
+    onclick:()=>fileIn.click(), onkeydown:e=>{ if (e.key==="Enter"||e.key===" "){ e.preventDefault(); fileIn.click(); } },
+    ondragover:e=>{ e.preventDefault(); drop.classList.add("over"); }, ondragleave:()=>drop.classList.remove("over"),
+    ondrop:e=>{ e.preventDefault(); drop.classList.remove("over"); readJsonFiles(e.dataTransfer.files); } },
+    h("strong", null, "Drop saved .json files here, or click to choose"),
+    h("div", { class:"small muted" }, "Several weeks at once is fine. Each lands in its own week."));
+  root.append(h("div", { class:"panel stack" },
+    h("h2", null, "2. Assignment"),
+    h("p", { class:"small muted", style:"margin:0" }, "On the assignment page: F12 → Network → the request like 80/?namespace=… → right-click → Copy → Copy response."),
+    ta,
+    h("div", { class:"row" },
+      h("button", { class:"btn primary", disabled: im.busy, onclick:()=>{ if (!im.json.trim()) return; try { ingestJson([JSON.parse(im.json)]); } catch(e){ im.status = "That isn’t valid JSON. Make sure you copied the whole response."; im.err = true; render(); } } }, "Read questions"),
+      h("span", { class:"small muted" }, "or")),
+    fileIn, drop,
+    h("p", { class:"status" + (im.err ? " err" : "") }, im.status)));
+
+  if (im.preview && (im.preview.length || (im.updates && im.updates.length))) root.append(previewPanel());
+  return root;
+}
+async function readJsonFiles(files){
+  const im = S.imp; const vals = []; const bad = [];
+  files = Array.from(files || []);
+  for (const f of files){
+    try { vals.push(JSON.parse(await f.text())); } catch(e){ bad.push(f.name); }
+  }
+  if (bad.length && !vals.length){ im.status = `Couldn’t read ${bad.join(", ")} as JSON.`; im.err = true; render(); return; }
+  ingestJson(vals, bad);
+}
+function ingestJson(vals, bad){
+  const im = S.imp; const all = []; const notes = [];
+  for (const v of vals){
+    const portal = portalExtractAll(v);
+    if (portal.length){
+      for (const a of portal){ all.push(...a.questions); if (a.skipped) notes.push(`${a.title || "Assignment"}: ${a.skipped} text-answer question${a.skipped===1?"":"s"} skipped`); }
+      continue;
+    }
+    if (v && v.log) { notes.push("That HAR file had no assignment responses in it."); continue; }
+    if (v && v.figures && typeof v.figures === "object"){
+      for (const [u, d] of Object.entries(v.figures)){ if (/^https:\/\//i.test(u) && /^data:image\//i.test(String(d))) dataURLToBlob(d).then(bl => figStore.put(u, bl)).catch(()=>{}); }
+    }
+    const arr = Array.isArray(v) ? v : (v && v.questions) || [];
+    if (!Array.isArray(v) && v && v.name && im.target === "__new" && !im.newName) im.newName = v.name;
+    all.push(...arr);
+  }
+  setPreview(all);
+  const extra = (notes.length ? " " + notes.join("; ") + "." : "") + (bad && bad.length ? ` Couldn’t read ${bad.join(", ")}.` : "");
+  if (extra){ im.status = (im.status + extra).trim(); render(); }
+}
+function setPreview(arr){
+  const im = S.imp;
+  const qs = []; let bad = 0;
+  for (const raw of arr){ const q = validQ(raw); q ? qs.push(q) : bad++; }
+  const core = q => norm(q.text) + "|" + (q.options||[]).map(norm).join("#");
+  const existing = new Map();
+  if (im.target !== "__new" && S.banks[im.target]) for (const q of S.banks[im.target].questions) existing.set(core(q), q);
+  const seen = new Set(); let dup = 0; const updates = [];
+  const fresh = qs.filter(q => {
+    const f = core(q);
+    if (seen.has(f)) return false;
+    seen.add(f);
+    const old = existing.get(f);
+    if (!old) return true;
+    const gainsImg = (q.images || []).some(u => !(old.images || []).includes(u));
+    const gainsPassage = q.passage && q.passage !== old.passage;
+    const gainsKey = !hasKey(old) && hasKey(q);
+    if (gainsImg || gainsPassage || gainsKey) updates.push({ old, q });
+    else dup++;
+    return false;
+  });
+  im.preview = fresh; im.updates = updates;
+  im.err = !fresh.length && !updates.length;
+  im.status = (dup ? `${dup} question${dup===1?" is":"s are"} already in this subject and won’t be added again.` : "") + (bad ? ` ${bad} couldn’t be used.` : "");
+  render();
+  setTimeout(()=>{ const p = document.getElementById("preview"); if (p) p.scrollIntoView({ behavior:"smooth", block:"start" }); }, 50);
+}
+function previewPanel(){
+  const im = S.imp; const qs = im.preview;
+  const existing = im.target !== "__new" && S.banks[im.target] ? S.banks[im.target] : null;
+  const weeks = [...new Set(qs.map(weekName))].sort(weekSort);
+  const unnamed = weeks.includes("");
+  const weekIn = unnamed ? h("input", { type:"text", value: im.group, placeholder:"e.g. Week 7", "aria-label":"Week for questions without one", oninput:e=>{ im.group = e.target.value; } }) : null;
+  const keyless = qs.filter(q=>!hasKey(q)).length;
+  const target = existing ? existing.name : (im.newName.trim() || "the new subject");
+  const panel = h("div", { class:"panel stack", id:"preview" },
+    h("div", { class:"row" }, h("h2", null, qs.length ? `3. Add ${qs.length} question${qs.length===1?"":"s"}` : "3. Update existing questions"), h("span", { class:"spacer" }),
+      h("label", { class:"check small" }, h("input", { type:"checkbox", checked: !!im.showKeys, onchange:e=>{ im.showKeys = e.target.checked; render(); } }), "Show answers")),
+    unnamed ? h("label", { class:"field" }, h("span", null, "Which week are the unlabelled ones?"), weekIn) : null,
+    keyless ? h("p", { class:"small muted" }, `${keyless} ha${keyless===1?"s":"ve"} no answer key. During practice you can save your answer as the key.`) : null,
+    im.updates && im.updates.length ? h("p", { class:"note" }, `${im.updates.length} question${im.updates.length===1?"":"s"} you already have will get the shared paragraph, figure or answer key that was missing.`) : null);
+  if (im.updates && im.updates.length){
+    const ul = h("ul", { class:"qcards" });
+    im.updates.forEach((u, i) => ul.append(qCard(u.q, i+1, !!im.showKeys, null)));
+    panel.append(h("details", { class:"pv-week" }, h("summary", null, h("strong", null, "Updated questions"), h("span", { class:"small muted" }, ` ${im.updates.length}, shown as they’ll look`)), ul));
+  }
+  for (const w of weeks){
+    const fresh = qs.filter(q => weekName(q) === w);
+    const already = existing ? existing.questions.filter(q => weekName(q) === w) : [];
+    const list = h("ul", { class:"qcards" });
+    fresh.forEach((q, i) => list.append(qCard(q, already.length + i + 1, !!im.showKeys, () => { im.preview = qs.filter(x => x !== q); render(); })));
+    const block = h("details", { class:"pv-week", open:true },
+      h("summary", null, h("strong", null, w || "Week not in the file"),
+        h("span", { class:"small muted" }, ` ${fresh.length} new` + (already.length ? `, joining ${already.length} already in this week` : ""))));
+    if (already.length){
+      const old = h("ul", { class:"qcards" });
+      already.forEach((q, i) => old.append(qCard(q, i+1, !!im.showKeys, null)));
+      block.append(h("details", { class:"pv-old" }, h("summary", { class:"small" }, `Show the ${already.length} already in ${w || NO_WEEK}`), old));
+    }
+    block.append(list);
+    panel.append(block);
+  }
+  panel.append(h("div", { class:"row" },
+    h("button", { class:"btn primary", disabled: !qs.length && !(im.updates && im.updates.length), onclick:commitImport }, qs.length ? `Add to ${target}` : "Update questions"),
+    h("button", { class:"btn ghost", onclick:()=>{ im.preview = null; im.status = ""; render(); } }, "Discard")));
+  return panel;
+}
+function commitImport(){
+  const im = S.imp; const qs = im.preview || []; const ups = im.updates || []; if (!qs.length && !ups.length) return;
+  let b;
+  if (im.target === "__new"){
+    const name = im.newName.trim();
+    if (!name){ im.status = "Give the new subject a name first."; im.err = true; render(); return; }
+    let id = "bank_" + slug(name); if (S.banks[id]) id += "-" + uid().slice(0,4);
+    b = { id, kind:"bank", name, questions:[] };
+  } else b = S.banks[im.target];
+  const group = im.group.trim();
+  for (const q of qs){ if (group && !q.group) q.group = group; b.questions.push(q); }
+  for (const { old, q } of ups){
+    if (q.images && q.images.length) old.images = [...new Set([...(q.images), ...(old.images || [])])];
+    if (q.passage) old.passage = q.passage;
+    if (q.set && !old.set){ old.set = q.set; old.seq = q.seq; }
+    if (!hasKey(old) && hasKey(q)){ old.answer = q.answer; old.type = q.type; if (q.tolerance != null) old.tolerance = q.tolerance; }
+  }
+  im.updates = [];
+  store.saveBank(b);
+  im.target = b.id; im.newName = ""; im.preview = null; im.json = "";
+  im.status = (qs.length ? `Added ${qs.length} question${qs.length===1?"":"s"} to ${b.name}. ` : "") + (ups.length ? `Updated ${ups.length} existing question${ups.length===1?"":"s"}. ` : "") + "Open Subjects → Manage to see them with the rest."; im.err = false; im.group = "";
+  S.openWeeks = S.openWeeks || new Set(); for (const q of qs) S.openWeeks.add(b.id + "::" + weekName(q));
+  render();
+}
+
+/* ---------- boot ---------- */
+if (inPreview){
+  const bar = document.createElement("p");
+  bar.className = "note"; bar.style.marginBottom = "1rem";
+  bar.textContent = "You’re viewing Drill inside a preview window. Figures from the portal won’t load and your data may not be kept here. Download drill.html and open it directly in Chrome for the full app.";
+  document.querySelector(".wrap").insertBefore(bar, document.getElementById("app"));
+}
+store.init();
+})();
+</script>
+</body>
+</html>
