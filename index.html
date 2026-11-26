@@ -239,7 +239,7 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
   </header>
   <main id="app" aria-live="polite"><p class="muted">Loading your subjects…</p></main>
   <p class="small muted" id="storeNote" style="margin-top:2.5rem"></p>
-  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 7</p>
+  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 8</p>
 </div>
 
 <script>
@@ -283,6 +283,7 @@ const S = {
   setup: null,
   session: null,
   history: [],
+  deleted: { banks:{}, questions:{}, sessions:{} },   // what was removed, and when, so other devices follow
   imp: { target: "", newName: "", group: "", preview: null, json: "", status: "", err: false, busy:false },
 };
 
@@ -310,6 +311,7 @@ const store = {
           if (v.kind === "bank") banks[d.id] = Object.assign({}, v, { id: d.id });
           else if (v.kind === "stats") stats[v.bankId] = v;
           else if (v.kind === "history") S.history = v.list || [];
+          else if (v.kind === "deleted") S.deleted = { banks: v.banks || {}, questions: v.questions || {}, sessions: v.sessions || {} };
         }
         S.banks = banks; S.stats = stats;
         onData();
@@ -323,11 +325,11 @@ const store = {
     this.mode = "local";
     try {
       const raw = localStorage.getItem("drill:v1");
-      if (raw){ const v = JSON.parse(raw); S.banks = v.banks || {}; S.stats = v.stats || {}; S.history = v.history || []; }
+      if (raw){ const v = JSON.parse(raw); S.banks = v.banks || {}; S.stats = v.stats || {}; S.history = v.history || []; if (v.deleted) S.deleted = v.deleted; }
     } catch(e){}
     onData();
   },
-  persistLocal(){ try { localStorage.setItem("drill:v1", JSON.stringify({ banks:S.banks, stats:S.stats, history:S.history || [] })); } catch(e){ showNote("Couldn’t save in this browser (storage full or blocked)."); } },
+  persistLocal(){ try { localStorage.setItem("drill:v1", JSON.stringify({ banks:S.banks, stats:S.stats, history:S.history || [], deleted:S.deleted })); } catch(e){ showNote("Couldn’t save in this browser (storage full or blocked)."); } },
   // one write at a time per document; the latest pending value wins
   write(docId, value){
     if (this.mode !== "db"){ this.persistLocal(); return Promise.resolve(); }
@@ -350,17 +352,22 @@ const store = {
     return run();
   },
   saveBank(b){ b.updatedAt = Date.now(); S.banks[b.id] = b; const { id, ...body } = b; sheet.scheduleBackup(); return this.write(b.id, body); },
-  deleteBank(id){ delete S.banks[id]; delete S.stats[id]; this.write(id, null); sheet.scheduleBackup(); return this.write("stats_" + id, null); },
+  deleteBank(id){ tombs().banks[id] = Date.now(); this.saveDeleted(); delete S.banks[id]; delete S.stats[id]; this.write(id, null); sheet.scheduleBackup(); return this.write("stats_" + id, null); },
+  dropBank(id){ delete S.banks[id]; delete S.stats[id]; this.write(id, null); return this.write("stats_" + id, null); },   // applying a deletion made elsewhere
+  saveDeleted(){ return this.write("deleted", Object.assign({ kind:"deleted" }, tombs())); },
   saveStats(bankId){ const s = S.stats[bankId]; if (s) return this.write("stats_" + bankId, s); },
   saveHistory(){ return this.write("history", { kind:"history", list: (S.history || []).slice(0, 120) }); },
 };
+function tombs(){ const d = S.deleted || (S.deleted = {}); d.banks = d.banks || {}; d.questions = d.questions || {}; d.sessions = d.sessions || {}; return d; }
+function markQuestionsDeleted(bankId, qs){ const t = tombs(), now = Date.now(); for (const q of qs) t.questions[bankId + "::" + q.id] = now; store.saveDeleted(); }
+const isDeletedQ = (bankId, q) => Math.max(tombs().questions[bankId + "::" + q.id] || 0, tombs().banks[bankId] || 0) > (q.addedAt || 0);
 function showNote(t){ document.getElementById("storeNote").textContent = t; }
 let firstData = true;
 function onData(){
   if (firstData){
     firstData = false;
     sheet.flush();
-    if (sheet.on) sheet.restore().then(st => { const r = mergeState(st); if ((r.addedQ || r.addedS) && ["library","stats","setup"].includes(S.view)) render(); }).catch(()=>{});
+    if (sheet.on) sheet.restore().then(st => { const r = mergeState(st); if ((r.addedQ || r.addedS || r.removedQ) && ["library","stats","setup","manage"].includes(S.view)) render(); }).catch(()=>{});
     showNote(store.mode === "db"
       ? "Your subjects are saved to your Claude account and stay private to you."
       : sheet.on ? "Saved in this browser and backed up to your Google Sheet." : "Saved in this browser only. Connect a Google Sheet (Sheet tab) or use Manage → Export backup.");
@@ -604,6 +611,7 @@ function validQ(q){
   if (out.imagesBelow && typeof q.textAfter === "string" && q.textAfter && out.text.endsWith(q.textAfter.trim()) && q.textAfter.trim().length < out.text.length) out.textAfter = q.textAfter.trim();
   if (Array.isArray(q.passageImages)){ const pi = q.passageImages.map(String).filter(isFigRef).slice(0, 8); if (pi.length) out.passageImages = pi; }
   if (q.source) out.source = String(q.source);
+  if (Number(q.addedAt) > 0) out.addedAt = Number(q.addedAt);
   if (type === "numeric"){
     const a = Number(q.answer);
     out.answer = q.answer === null || q.answer === undefined || q.answer === "" || !isFinite(a) ? null : a;
@@ -902,7 +910,7 @@ function viewManage(){
   for (const w of weeksOf(b)){
     const renameIn = h("input", { type:"text", value:w.name, placeholder:NO_WEEK, "aria-label":"Week name", style:"max-width:12rem" });
     const list = h("ul", { class:"qcards" });
-    w.questions.forEach((q, i) => list.append(qCard(q, i+1, showKeys, () => { b.questions = b.questions.filter(x => x !== q); store.saveBank(b); render(); })));
+    w.questions.forEach((q, i) => list.append(qCard(q, i+1, showKeys, () => { markQuestionsDeleted(b.id, [q]); b.questions = b.questions.filter(x => x !== q); store.saveBank(b); render(); })));
     S.openWeeks = S.openWeeks || new Set();
     const wk = b.id + "::" + w.name;
     root.append(h("details", { class:"panel", open: S.openWeeks.has(wk), ontoggle:e=>{ e.target.open ? S.openWeeks.add(wk) : S.openWeeks.delete(wk); } },
@@ -911,7 +919,7 @@ function viewManage(){
         renameIn,
         h("button", { class:"btn small", onclick:()=>{ const n = renameIn.value.trim(); for (const q of w.questions) q.group = n; store.saveBank(b); render(); } }, "Rename week"),
         h("span", { class:"spacer" }),
-        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm(`Delete ${w.name || "these"} questions (${w.questions.length})?`)){ const set = new Set(w.questions); b.questions = b.questions.filter(q => !set.has(q)); store.saveBank(b); render(); } } }, "Delete week")),
+        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm(`Delete ${w.name || "these"} questions (${w.questions.length})?`)){ const set = new Set(w.questions); markQuestionsDeleted(b.id, w.questions); b.questions = b.questions.filter(q => !set.has(q)); store.saveBank(b); render(); } } }, "Delete week")),
       list));
   }
   return root;
@@ -1365,7 +1373,7 @@ function viewSession(){
     h("button", { class:"btn primary", disabled: !avail.length, onclick:()=>practiceEntries(avail.map(x => ({ bankId:x.it.bankId, q:x.q })), "Retake") }, "Retake this session"),
     wrong.length ? h("button", { class:"btn", onclick:()=>practiceEntries(wrong.map(x => ({ bankId:x.it.bankId, q:x.q })), "Retake missed") }, `Redo the ${wrong.length} missed`) : null,
     h("span", { class:"spacer" }),
-    h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Delete this session from your history?")){ S.history = S.history.filter(x => x.id !== r.id); store.saveHistory(); go("stats"); } } }, "Delete from history")));
+    h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Delete this session from your history?")){ tombs().sessions[r.id] = Date.now(); store.saveDeleted(); S.history = S.history.filter(x => x.id !== r.id); store.saveHistory(); sheet.scheduleBackup(); go("stats"); } } }, "Delete from history")));
   const rev = h("div", { class:"panel" }, h("h2", { style:"margin-bottom:.8rem" }, "Answers"),
     h("p", { class:"small muted" }, "Letters are in the original order, as on the portal."));
   live.forEach(({ it, q }, i) => {
@@ -1403,7 +1411,7 @@ const sheet = {
     if (!j.ok) throw new Error(j.error === "bad token" ? "The key doesn’t match the one in the script." : (j.error || "The Sheet refused the request."));
     return j;
   },
-  state(){ return { version:1, savedAt: Date.now(), banks: S.banks, stats: S.stats, history: S.history || [] }; },
+  state(){ return { version:1, savedAt: Date.now(), banks: S.banks, stats: S.stats, history: S.history || [], deleted: tombs() }; },
   scheduleBackup(){
     if (!this.on || this.cfg.auto === false) return;
     clearTimeout(this.timer);
@@ -1614,27 +1622,40 @@ function viewSheet(){
       pre));  return root;
 }
 function mergeState(remote){
-  // union of both sides; nothing on either side is lost
-  const r = remote || {}; let addedQ = 0, addedS = 0;
+  // union of both sides, except anything either side deleted after it was added
+  const r = remote || {}; let addedQ = 0, addedS = 0, removedQ = 0;
   if (r.figures) absorbFigures(r.figures).then(() => { if (["manage","quiz","library"].includes(S.view)) render(); });
+  const t = tombs(), rt = r.deleted || {};
+  let tombChanged = false;
+  for (const kind of ["banks", "questions", "sessions"]) for (const [k, ts] of Object.entries(rt[kind] || {})) if ((t[kind][k] || 0) < ts){ t[kind][k] = ts; tombChanged = true; }
+  // apply deletions to what's here
+  for (const [id, b] of Object.entries(S.banks)){
+    if ((t.banks[id] || 0) > (b.createdAt || 0)){ store.dropBank(id); continue; }
+    const keep = b.questions.filter(q => !isDeletedQ(id, q));
+    if (keep.length !== b.questions.length){ removedQ += b.questions.length - keep.length; b.questions = keep; }
+  }
+  // bring in what's new from the other side
   for (const [id, rb] of Object.entries(r.banks || {})){
-    const lb = S.banks[id];
-    if (!lb){ S.banks[id] = rb; addedQ += (rb.questions || []).length; continue; }
+    if ((t.banks[id] || 0) > (rb.createdAt || 0)) continue;
+    let lb = S.banks[id];
+    if (!lb){ lb = S.banks[id] = Object.assign({}, rb, { questions: [] }); }
     const have = new Set(lb.questions.map(q => q.id));
-    for (const q of rb.questions || []) if (!have.has(q.id)){ lb.questions.push(q); addedQ++; }
+    for (const q of rb.questions || []) if (!have.has(q.id) && !isDeletedQ(id, q)){ lb.questions.push(q); addedQ++; }
   }
   for (const [id, rs] of Object.entries(r.stats || {})){
+    if (!S.banks[id]) continue;
     const ls = S.stats[id] || (S.stats[id] = { kind:"stats", bankId:id, q:{} });
     ls.q = ls.q || {};
     for (const [qid, v] of Object.entries(rs.q || {})){ const mine = ls.q[qid]; if (!mine || (v.seen || 0) > (mine.seen || 0) || ((v.seen||0) === (mine.seen||0) && (v.last||0) > (mine.last||0))) ls.q[qid] = v; }
   }
   const ids = new Set((S.history || []).map(x => x.id));
-  for (const hrec of r.history || []) if (!ids.has(hrec.id)){ (S.history = S.history || []).push(hrec); addedS++; }
-  S.history = (S.history || []).sort((a, b) => b.at - a.at).slice(0, HISTORY_MAX);
+  for (const hrec of r.history || []) if (!ids.has(hrec.id) && !t.sessions[hrec.id]){ (S.history = S.history || []).push(hrec); addedS++; }
+  S.history = (S.history || []).filter(x => !t.sessions[x.id]).sort((a, b) => b.at - a.at).slice(0, HISTORY_MAX);
   for (const bk of Object.values(S.banks)) store.saveBank(bk);
   for (const id of Object.keys(S.stats)) store.saveStats(id);
   store.saveHistory();
-  return { addedQ, addedS };
+  if (tombChanged) store.saveDeleted();
+  return { addedQ, addedS, removedQ };
 }
 async function doRestore(){
   try {
@@ -1642,8 +1663,8 @@ async function doRestore(){
     let st = null;
     try { st = await sheet.restore(); } catch(e){ if (/no backup/i.test(e.message)) st = null; else throw e; }
     if (!st){ sheet.status = "The Sheet has no backup yet."; render(); return; }
-    const { addedQ, addedS } = mergeState(st);
-    sheet.status = addedQ || addedS ? `Got ${addedQ} question${addedQ===1?"":"s"} and ${addedS} session${addedS===1?"":"s"} from the Sheet. Everything here was kept too.` : "Already up to date with the Sheet.";
+    const { addedQ, addedS, removedQ } = mergeState(st);
+    sheet.status = addedQ || addedS || removedQ ? `Got ${addedQ} question${addedQ===1?"":"s"} and ${addedS} session${addedS===1?"":"s"} from the Sheet` + (removedQ ? `, and removed ${removedQ} that were deleted on another device` : "") + "." : "Already up to date with the Sheet.";
     render();
   } catch(e){ sheet.status = "Couldn’t get your data: " + e.message; render(); }
 }
@@ -1824,10 +1845,11 @@ function commitImport(){
     const name = im.newName.trim();
     if (!name){ im.status = "Give the new subject a name first."; im.err = true; render(); return; }
     let id = "bank_" + slug(name); if (S.banks[id]) id += "-" + uid().slice(0,4);
-    b = { id, kind:"bank", name, questions:[] };
+    b = { id, kind:"bank", name, questions:[], createdAt: Date.now() };
   } else b = S.banks[im.target];
   const group = im.group.trim();
-  for (const q of qs){ if (group && !q.group) q.group = group; b.questions.push(q); }
+  const now = Date.now();
+  for (const q of qs){ if (group && !q.group) q.group = group; q.addedAt = now; b.questions.push(q); }
   for (const { old, q } of ups){
     if (q.optionImages){
       const moved = new Set(q.optionImages.flat());
