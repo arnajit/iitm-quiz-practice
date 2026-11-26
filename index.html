@@ -106,8 +106,11 @@ textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .qtext{font-size:1.08rem;white-space:pre-wrap;margin-bottom:1.1rem}
 .opts{display:grid;gap:.55rem}
 .opt{display:flex;gap:.85rem;align-items:flex-start;text-align:left;width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:.7rem .9rem;cursor:pointer;transition:border-color .12s}
-.opt:hover:not(:disabled){border-color:var(--pen)}
-.opt:disabled{cursor:default}
+.opt:hover:not([aria-disabled="true"]){border-color:var(--pen)}
+.opt[aria-disabled="true"]{cursor:default}
+.optimgs{display:grid;gap:.4rem;margin-top:.2rem}
+.opt .txt{min-width:0;flex:1}
+.optimgs .fig img,.qc-oimg .fig img{max-height:14rem;width:auto;max-width:100%;background:#fff}
 .bubble{flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:2px solid var(--muted);display:grid;place-items:center;font:700 .85rem var(--display);color:var(--muted);margin-top:-.1rem;transition:background .12s,border-color .12s}
 .opt.multi .bubble{border-radius:7px}
 .opt[aria-checked="true"]{border-color:var(--pen);background:var(--pen-soft)}
@@ -167,6 +170,8 @@ details.panel[open]>summary::before{transform:rotate(90deg)}
 .qc-opts li{display:flex;gap:.55rem;align-items:baseline;padding:.2rem .4rem;border-radius:6px}
 .qc-opts li.right{background:var(--ok-soft)}
 .qc-l{font:700 .8rem var(--display);color:var(--muted);width:1.1rem;flex:none}
+.qc-otext{min-width:0;flex:1}
+.qc-oimg{display:grid;gap:.3rem;margin-top:.2rem}
 .qc-ok{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--ok);white-space:nowrap}
 .pv-week{border-top:1px solid var(--line);padding-top:.8rem}
 .pv-week>summary,.pv-old>summary{cursor:pointer}
@@ -444,9 +449,9 @@ function portalConvert(data){
     if (fb) item.explanation = fb;
     if (Array.isArray(q.choices) && q.choices.length){
       item.type = q.multiple_selections ? "multi" : "single";
-      item.options = q.choices.map(c => portalHtml(c.text).text || "(blank option)");
-      const optImgs = q.choices.flatMap(c => portalHtml(c.text).images);
-      if (optImgs.length) item.images = item.images.concat(optImgs);
+      const parsed = q.choices.map(c => portalHtml(c.text));
+      item.options = parsed.map(c => c.text);
+      if (parsed.some(c => c.images.length)) item.optionImages = parsed.map(c => c.images);
       let ans = q.choices.map((c, k) => Number(c.score) > 0 ? k : -1).filter(k => k >= 0);
       if (!ans.length && Number(data.score) === 100 && saved[r.instance] && Array.isArray(saved[r.instance].selected)){
         ans = saved[r.instance].selected.map(id => q.choices.findIndex(c => String(c.id) === String(id))).filter(k => k >= 0);
@@ -533,8 +538,12 @@ function validQ(q){
     out.answer = q.answer === null || q.answer === undefined || q.answer === "" || !isFinite(a) ? null : a;
     out.tolerance = isFinite(Number(q.tolerance)) && q.tolerance !== null && q.tolerance !== "" ? Math.abs(Number(q.tolerance)) : null;
   } else {
-    out.options = (q.options||[]).map(o => String(o).trim()).filter(Boolean);
-    if (out.options.length < 2) return null;
+    const oi = Array.isArray(q.optionImages) ? q.optionImages : [];
+    const pairs = (q.options||[]).map((o, i) => ({ t: String(o == null ? "" : o).trim().replace(/^\(blank option\)$/, ""),
+      im: (Array.isArray(oi[i]) ? oi[i] : []).map(String).filter(u => /^https:\/\//i.test(u)).slice(0, 4) }));
+    if (pairs.length < 2 || pairs.every(x => !x.t && !x.im.length)) return null;
+    out.options = pairs.map(x => x.t);
+    if (pairs.some(x => x.im.length)) out.optionImages = pairs.map(x => x.im);
     let ans = q.answer;
     if (ans === null || ans === undefined) out.answer = null;
     else {
@@ -547,7 +556,10 @@ function validQ(q){
   }
   return out;
 }
-const fingerprint = q => norm(q.passage) + "|" + norm(q.text) + "|" + (q.options||[]).map(norm).join("#");
+const optNorm = o => norm(o).replace(/^\(blank option\)$/, "");
+const fingerprint = q => norm(q.passage) + "|" + norm(q.text) + "|" + (q.options||[]).map(optNorm).join("#");
+const optImgs = (q, i) => (q.optionImages && q.optionImages[i]) || [];
+const optText = (q, i) => q.options[i] || (optImgs(q, i).length ? "(image)" : "");
 function isCorrect(q, resp){
   if (resp == null) return false;
   if (q.type === "numeric"){
@@ -702,7 +714,8 @@ function figure(src, label, cls){
       h("div", { class:"row", style:"margin:.2rem 0" }, h("button", { class:"btn small", onclick:e => { e.stopPropagation(); readClipboard(); } }, "Paste copied image")),
       (msg = h("div", { class:"small muted", "aria-live":"polite" }, "Drill keeps its own copy, so you only do this once per figure.")),
       fileIn);
-    zone.addEventListener("click", () => zone.focus());
+    zone.addEventListener("click", e => { e.stopPropagation(); zone.focus(); });
+    zone.addEventListener("keydown", e => e.stopPropagation());
     wrap.replaceChildren(zone);
   };
   wrap._src = src;
@@ -731,7 +744,10 @@ function qCard(q, n, showKey, onRemove){
     const ol = h("ol", { class:"qc-opts" });
     q.options.forEach((o, i) => {
       const right = showKey && hasKey(q) && q.answer.includes(i);
-      ol.append(h("li", { class: right ? "right" : "" }, h("span", { class:"qc-l" }, LETTERS[i]), h("span", null, o), right ? h("span", { class:"qc-ok" }, "✓ answer") : null));
+      const imgs = optImgs(q, i);
+      ol.append(h("li", { class: right ? "right" : "" }, h("span", { class:"qc-l" }, LETTERS[i]),
+        h("span", { class:"qc-otext" }, o || null, imgs.length ? h("span", { class:"qc-oimg" }, imgs.map((u, k) => figure(u, `Option ${LETTERS[i]} image`))) : null),
+        right ? h("span", { class:"qc-ok" }, "✓ answer") : null));
     });
     li.append(ol);
   }
@@ -1021,10 +1037,14 @@ function viewQuiz(){
         if (q.answer.includes(orig)) cls += " is-right";
         else if (chosen) cls += " is-wrong";
       }
-      opts.append(h("button", { class:cls, role: q.type==="multi" ? "checkbox" : "radio", "aria-checked": String(chosen && !(locked && hasKey(q))), disabled:locked,
-        onclick:()=>pick(orig) },
+      const imgs = optImgs(q, orig);
+      opts.append(h("div", { class:cls, role: q.type==="multi" ? "checkbox" : "radio", "aria-checked": String(chosen && !(locked && hasKey(q))),
+        "aria-disabled": locked ? "true" : null, tabindex: locked ? "-1" : "0", "aria-label": `Option ${LETTERS[pos]}` + (q.options[orig] ? `: ${q.options[orig]}` : imgs.length ? " (image)" : ""),
+        onclick:()=>{ if (!locked) pick(orig); },
+        onkeydown:e=>{ if (e.key === " " && !locked){ e.preventDefault(); pick(orig); } } },
         h("span", { class:"bubble", "aria-hidden":"true" }, LETTERS[pos]),
-        h("span", { class:"txt" }, q.options[orig])));
+        h("span", { class:"txt" }, q.options[orig] || null,
+          imgs.length ? h("span", { class:"optimgs" }, imgs.map((u, k) => figure(u, `Option ${LETTERS[pos]} image${imgs.length > 1 ? " " + (k+1) : ""}`))) : null)));
     });
     card.append(opts);
   }
@@ -1148,9 +1168,9 @@ function findQ(bankId, qid){ const b = S.banks[bankId]; return b ? b.questions.f
 function respLabel(q, resp){
   if (resp == null || (Array.isArray(resp) && !resp.length)) return "skipped";
   if (q.type === "numeric") return String(resp);
-  return resp.map(a => `${LETTERS[a]}. ${q.options[a] != null ? q.options[a] : "?"}`).join("; ");
+  return resp.map(a => `${LETTERS[a]}. ${q.options[a] != null ? optText(q, a) : "?"}`).join("; ");
 }
-function keyLabel(q){ return !hasKey(q) ? "no key" : q.type === "numeric" ? String(q.answer) : q.answer.map(a => `${LETTERS[a]}. ${q.options[a]}`).join("; "); }
+function keyLabel(q){ return !hasKey(q) ? "no key" : q.type === "numeric" ? String(q.answer) : q.answer.map(a => `${LETTERS[a]}. ${optText(q, a)}`).join("; "); }
 function practiceEntries(entries, label){
   const st = Object.assign({}, S.setup || {}, { order:"shuffle", feedback:(S.setup && S.setup.feedback) || "instant", shuffleOpts: !S.setup || S.setup.shuffleOpts !== false, keepSets:false, banks:new Set(entries.map(e=>e.bankId)), groups:null, focus:"all", count:"" });
   S.setup = st;
@@ -1564,7 +1584,7 @@ function viewResults(){
   const rev = h("div", { class:"panel" }, h("h2", { style:"margin-bottom:.8rem" }, "Review"));
   ss.items.forEach((it, i) => {
     const q = it.q; const k = hasKey(q); const ok = k && isCorrect(q, it.resp);
-    const lab = v => q.type === "numeric" ? String(v) : v.map(a => `${LETTERS[it.order.indexOf(a)]}. ${q.options[a]}`).join("; ");
+    const lab = v => q.type === "numeric" ? String(v) : v.map(a => `${LETTERS[it.order.indexOf(a)]}. ${optText(q, a)}`).join("; ");
     rev.append(h("div", { class:"rev " + (k ? (ok ? "ok" : "bad") : "") },
       h("div", { class:"small muted" }, `Question ${i+1}`, q.group ? `, ${q.group}` : ""),
       h("div", { class:"q" }, q.text),
@@ -1648,7 +1668,7 @@ function setPreview(arr){
   const im = S.imp;
   const qs = []; let bad = 0;
   for (const raw of arr){ const q = validQ(raw); q ? qs.push(q) : bad++; }
-  const core = q => norm(q.text) + "|" + (q.options||[]).map(norm).join("#");
+  const core = q => norm(q.text) + "|" + (q.options||[]).map(optNorm).join("#");
   const existing = new Map();
   if (im.target !== "__new" && S.banks[im.target]) for (const q of S.banks[im.target].questions) existing.set(core(q), q);
   const seen = new Set(); let dup = 0; const updates = [];
@@ -1659,9 +1679,10 @@ function setPreview(arr){
     const old = existing.get(f);
     if (!old) return true;
     const gainsImg = (q.images || []).some(u => !(old.images || []).includes(u));
+    const gainsOptImg = !!q.optionImages && JSON.stringify(q.optionImages) !== JSON.stringify(old.optionImages || null);
     const gainsPassage = q.passage && q.passage !== old.passage;
     const gainsKey = !hasKey(old) && hasKey(q);
-    if (gainsImg || gainsPassage || gainsKey) updates.push({ old, q });
+    if (gainsImg || gainsOptImg || gainsPassage || gainsKey) updates.push({ old, q });
     else dup++;
     return false;
   });
@@ -1723,7 +1744,13 @@ function commitImport(){
   const group = im.group.trim();
   for (const q of qs){ if (group && !q.group) q.group = group; b.questions.push(q); }
   for (const { old, q } of ups){
+    if (q.optionImages){
+      const moved = new Set(q.optionImages.flat());
+      old.optionImages = q.optionImages; old.options = q.options.slice();
+      if (old.images) old.images = old.images.filter(u => !moved.has(u));
+    }
     if (q.images && q.images.length) old.images = [...new Set([...(q.images), ...(old.images || [])])];
+    if (old.images && !old.images.length) delete old.images;
     if (q.passage) old.passage = q.passage;
     if (q.set && !old.set){ old.set = q.set; old.seq = q.seq; }
     if (!hasKey(old) && hasKey(q)){ old.answer = q.answer; old.type = q.type; if (q.tolerance != null) old.tolerance = q.tolerance; }
