@@ -270,7 +270,8 @@ function shuffle(a){ a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math
 const LETTERS = "ABCDEFGHIJKLMNOP";
 const norm = s => String(s||"").toLowerCase().replace(/\s+/g," ").trim();
 // Options that only make sense in a fixed spot stay at the end when shuffling.
-const ANCHOR = /^(all|none|both|neither)\b.*(above|these|of the|options)|^(information|data)\b.*(not|in)sufficient|^cannot be determined|^he is indifferent|^indifferent|^both\b|^neither\b/i;
+const ANCHOR = /^(all|none|both|neither)\b.*(above|these|of the|options)|^(information|data)\b.*(not|in)sufficient|^cannot be determined|^can(not|’t|'t) be (determined|decided|said)|not possible to (decide|determine|say|tell)|^insufficient|^he is indifferent|^indifferent|^both\b|^neither\b/i;
+const FIXED_PAIR = /^(true|false|yes|no)$/i;
 
 /* ---------- state ---------- */
 const S = {
@@ -383,8 +384,10 @@ function portalHtml(html){
   // does the first picture come after some text? ("The figure below shows…")
   const firstImg = s.search(/<img\b/i);
   const after = firstImg > 0 && portalDecodeEntities(s.slice(0, firstImg).replace(/<[^>]+>/g, " ")).replace(/\s+/g, "").length > 0;
+  const lastImgEnd = (() => { let m, end = -1; const re = /<img\b[^>]*>/gi; while ((m = re.exec(s))) end = m.index + m[0].length; return end; })();
+  const tail = lastImgEnd > 0 ? s.slice(lastImgEnd) : "";
   // math: <gcb-math>..</gcb-math>, also tolerate a second opening tag used as the closer
-  s = s.replace(/<gcb-math[^>]*>([\s\S]*?)<\/?gcb-math>/gi, (_, m) => " \\(" + portalDecodeEntities(m).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim() + "\\) ");
+  s = s.replace(/<gcb-math[^>]*>([\s\S]*?)<\/?gcb-math>/gi, (_, m) => " \\(" + portalDecodeEntities(m).replace(/<[^>]+>/g,"").replace(/\s+/g," ").replace(/\\mathscr\b/g, "\\mathcal").trim() + "\\) ");
   s = s.replace(/<img\b[^>]*>/gi, tag => {
     const attr = n => { const m = tag.match(new RegExp("\\b" + n + "\\s*=\\s*[\"']([^\"']+)[\"']", "i")); return m ? portalDecodeEntities(m[1]).trim() : ""; };
     let src = attr("src"); const dp = attr("data-path");
@@ -399,7 +402,22 @@ function portalHtml(html){
   s = portalDecodeEntities(s).replace(/\t/g," ").replace(/[ \u00a0]+/g," ");
   s = s.split("\n").map(l => l.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
   s = s.replace(/(\\\)) +([,.;:?!)])/g, "$1$2").replace(/ +(\\\))/g, "$1").replace(/(\\\() +/g, "$1").replace(/\( \\\(/g,"(\\(");
-  return { text: s, images, after };
+  let textAfter = "";
+  if (images.length && tail){
+    const t = portalHtml_plain(tail);
+    if (t && s.endsWith(t) && t.length < s.length) textAfter = t;
+  }
+  return { text: s, images, after, textAfter };
+}
+function portalHtml_plain(html){
+  // same text clean-up as portalHtml, without pictures
+  let s = String(html || "");
+  s = s.replace(/<gcb-math[^>]*>([\s\S]*?)<\/?gcb-math>/gi, (_, m) => " \\(" + portalDecodeEntities(m).replace(/<[^>]+>/g,"").replace(/\s+/g," ").replace(/\\mathscr\b/g, "\\mathcal").trim() + "\\) ");
+  s = s.replace(/<img\b[^>]*>/gi, "\n").replace(/<br\s*\/?>/gi, "\n").replace(/<\/?(div|p|li|ul|ol|tr|table|h\d)\b[^>]*>/gi, "\n").replace(/<td\b[^>]*>/gi, " ").replace(/<[^>]+>/g, "");
+  s = portalDecodeEntities(s).replace(/\t/g," ").replace(/[ \u00a0]+/g," ");
+  s = s.split("\n").map(l => l.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  s = s.replace(/(\\\)) +([,.;:?!)])/g, "$1$2").replace(/ +(\\\))/g, "$1").replace(/(\\\() +/g, "$1").replace(/\( \\\(/g,"(\\(");
+  return s;
 }
 function portalFindHtml(it){
   // content blocks name their HTML differently; take the likeliest field, else any HTML-looking string
@@ -414,7 +432,7 @@ function portalFindHtml(it){
   walk(it, 0);
   return found;
 }
-function isPortalAssessment(v){ return v && typeof v === "object" && Array.isArray(v.sections) && v.sections.some(s => Array.isArray(s.items)); }
+function isPortalAssessment(v){ return v && typeof v === "object" && Array.isArray(v.sections) && v.sections.some(s => s && (Array.isArray(s.items) || (s.kind === "question" && s.question))); }
 function portalConvert(data){
   const title = String(data.title || "").trim();
   const wk = title.match(/^week\s*\d+/i);
@@ -423,8 +441,10 @@ function portalConvert(data){
   // content items ("The information below is common to Questions 1 to 2").
   const raw = [];
   let ctxN = 0;
-  const ctxFrom = html => { const c = portalHtml(html); return (c.text || c.images.length) ? { text: c.text.replace(/^paragraph\s+for\s+questions?\s*\d+\s*(?:[-–to]+\s*\d+)?\s*:?\s*/i, ""), images: c.images, id: "ctx-" + (++ctxN) } : null; };
+  const ctxFrom = html => { const c = portalHtml(html); return (c.text || c.images.length) ? { text: c.text.replace(/^paragraph\s+for\s+questions?\s*\d+\s*(?:[-–to]+\s*\d+)?\s*:?\s*/i, "").replace(/^(?:common\s+data|the\s+information\s+below)[^\n]{0,80}\n+/i, ""), images: c.images, id: "ctx-" + (++ctxN) } : null; };
   for (const sec of data.sections || []){
+    // a question can sit directly in the list, outside any group
+    if (sec && sec.kind === "question" && sec.question){ raw.push({ instance: sec.instance_id, q: sec.question, ctx: null }); continue; }
     let ctx = sec.introduction ? ctxFrom(typeof sec.introduction === "string" ? sec.introduction : (sec.introduction.value || "")) : null;
     for (const it of sec.items || []){
       if (it.kind === "question" && it.question){ raw.push({ instance: it.instance_id, q: it.question, ctx }); continue; }
@@ -443,6 +463,7 @@ function portalConvert(data){
     if (hm){ header = { a: +hm[1], b: +(hm[2] || hm[1]) }; text = text.slice(hm[0].length).trim(); }
     const item = { id: "p" + (q.id || r.instance || i), group, images: p.images, source: title };
     if (p.after && p.images.length) item.imagesBelow = true;
+    if (p.after && p.textAfter) item.textAfter = p.textAfter;
     if (header){
       const blocks = text.split(/\n\n+/);
       if (blocks.length > 1){ passage = blocks.slice(0, -1).join("\n\n"); text = blocks[blocks.length - 1]; }
@@ -467,7 +488,7 @@ function portalConvert(data){
       const g = q.graders.find(g => Number(g.score) > 0) || q.graders[0];
       const resp = String(g.response || "").trim();
       const nums = resp.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || [];
-      if (/range/i.test(g.matcher || "") && nums.length >= 2){ const lo = +nums[0], hi = +nums[1]; item.answer = (lo + hi) / 2; item.tolerance = Math.abs(hi - lo) / 2; }
+      if (/range/i.test(g.matcher || "") && nums.length >= 2){ const lo = +nums[0], hi = +nums[1]; item.answer = +((lo + hi) / 2).toPrecision(12); item.tolerance = +(Math.abs(hi - lo) / 2).toPrecision(12); }
       else if (nums.length){ item.answer = +nums[0]; }
       else if (resp){ item.type = "text"; }
       else item.answer = null;
@@ -499,7 +520,7 @@ function portalConvert(data){
     const c = x._ctx; if (!c) continue;
     if (c.text && !(x.passage || "").includes(c.text)) x.passage = x.passage ? c.text + "\n\n" + x.passage : c.text;
     const imgs = c.images.filter(u => !x.images.includes(u));
-    if (imgs.length){ x.images = imgs.concat(x.images); delete x.imagesBelow; }
+    if (imgs.length) x.passageImages = imgs;
     if (!x.set && ctxCount[c.id] > 1){ x.set = c.id + "-" + data.id; x.seq = x._pos; }
   }
   out.forEach(x => { delete x._header; delete x._pos; delete x._ctx; if (!x.images.length) delete x.images; });
@@ -540,11 +561,11 @@ async function internalizeFigures(qs){
   // swap any embedded data: pictures for references, keeping the pictures in the figure store
   for (const q of qs){
     if (!q || typeof q !== "object") continue;
-    if (Array.isArray(q.images)) for (let i = 0; i < q.images.length; i++) if (/^data:image\//i.test(q.images[i])) q.images[i] = await storeEmbedded(q.images[i]);
+    for (const key of ["images", "passageImages"]) if (Array.isArray(q[key])) for (let i = 0; i < q[key].length; i++) if (/^data:image\//i.test(q[key][i])) q[key][i] = await storeEmbedded(q[key][i]);
     if (Array.isArray(q.optionImages)) for (const arr of q.optionImages) if (Array.isArray(arr)) for (let i = 0; i < arr.length; i++) if (/^data:image\//i.test(arr[i])) arr[i] = await storeEmbedded(arr[i]);
   }
 }
-const figRefsOf = qs => { const set = new Set(); for (const q of qs){ (q.images || []).forEach(u => set.add(u)); (q.optionImages || []).forEach(a => (a || []).forEach(u => set.add(u))); } return [...set]; };
+const figRefsOf = qs => { const set = new Set(); for (const q of qs){ (q.images || []).forEach(u => set.add(u)); (q.passageImages || []).forEach(u => set.add(u)); (q.optionImages || []).forEach(a => (a || []).forEach(u => set.add(u))); } return [...set]; };
 async function collectFigures(qs, onlyEmbedded){
   const out = {};
   for (const u of figRefsOf(qs)){
@@ -579,6 +600,8 @@ function validQ(q){
   if (Array.isArray(q.images)){ const im = q.images.map(String).filter(isFigRef).slice(0, 8); if (im.length) out.images = im; }
   if (q.set){ out.set = String(q.set); out.seq = Number(q.seq) || 0; }
   if (q.imagesBelow && out.images) out.imagesBelow = true;
+  if (out.imagesBelow && typeof q.textAfter === "string" && q.textAfter && out.text.endsWith(q.textAfter.trim()) && q.textAfter.trim().length < out.text.length) out.textAfter = q.textAfter.trim();
+  if (Array.isArray(q.passageImages)){ const pi = q.passageImages.map(String).filter(isFigRef).slice(0, 8); if (pi.length) out.passageImages = pi; }
   if (q.source) out.source = String(q.source);
   if (type === "numeric"){
     const a = Number(q.answer);
@@ -602,6 +625,11 @@ function validQ(q){
     }
   }
   return out;
+}
+function splitText(q){
+  if (q.imagesBelow && q.images && q.textAfter && q.text.endsWith(q.textAfter) && q.textAfter.length < q.text.length)
+    return [q.text.slice(0, q.text.length - q.textAfter.length).trim(), q.textAfter];
+  return [q.text, ""];
 }
 const optNorm = o => norm(o).replace(/^\(blank option\)$/, "");
 const fingerprint = q => norm(q.passage) + "|" + norm(q.text) + "|" + (q.options||[]).map(optNorm).join("#");
@@ -783,11 +811,14 @@ function qCard(q, n, showKey, onRemove){
     h("span", { class:"spacer" }),
     onRemove ? h("button", { class:"btn ghost danger small", "aria-label":`Remove question ${n}`, onclick:onRemove }, "Remove") : null);
   li.append(head);
-  if (q.passage) li.append(h("details", { class:"qc-passage" }, h("summary", null, "Shared paragraph"), h("div", null, q.passage)));
+  if (q.passage || q.passageImages) li.append(h("details", { class:"qc-passage" }, h("summary", null, "Shared paragraph"), h("div", null, q.passage || null),
+    (q.passageImages || []).map((src, k) => figure(src, `Shared figure ${k+1}`, "qc-img"))));
   const figs = (q.images || []).map((src, k) => figure(src, `Figure ${k+1}`, "qc-img"));
+  const [tB, tA] = splitText(q);
   if (!q.imagesBelow) figs.forEach(f => li.append(f));
-  li.append(h("div", { class:"qc-text" }, q.text));
+  li.append(h("div", { class:"qc-text" }, tB));
   if (q.imagesBelow) figs.forEach(f => li.append(f));
+  if (tA) li.append(h("div", { class:"qc-text" }, tA));
   if (q.type === "numeric"){
     li.append(h("div", { class:"small muted" }, "Numeric answer" + (showKey && hasKey(q) ? `: ${q.answer}` + (q.tolerance ? ` (±${q.tolerance})` : "") : "")));
   } else {
@@ -1000,7 +1031,12 @@ function buildItem(entry, shuffleOpts){
   let order = null;
   if (q.type !== "numeric"){
     const idx = q.options.map((_,i)=>i);
-    if (shuffleOpts){
+    // True/False and Yes/No keep their order; anything else shuffles
+    const fixedPair = idx.filter(i => FIXED_PAIR.test((q.options[i] || "").trim()));
+    if (shuffleOpts && fixedPair.length >= 2){
+      const rest = idx.filter(i => !fixedPair.includes(i));
+      order = fixedPair.concat(rest);
+    } else if (shuffleOpts){
       const anchored = idx.filter(i => ANCHOR.test(q.options[i]));
       const free = idx.filter(i => !ANCHOR.test(q.options[i]));
       order = shuffle(free).concat(anchored);
@@ -1052,16 +1088,19 @@ function viewQuiz(){
     h("div", { class:"progress", role:"progressbar", "aria-valuemin":"0", "aria-valuemax":String(total), "aria-valuenow":String(ss.idx+1) }, h("i", { style:`width:${(ss.idx+1)/total*100}%` }))
   );
   const card = h("div", { class:"panel" });
-  if (q.passage){
-    const long = q.passage.length > 600;
+  if (q.passage || q.passageImages){
+    const pfigs = (q.passageImages || []).map((src, k) => figure(src, `Shared figure${q.passageImages.length > 1 ? " " + (k+1) : ""}`));
+    const long = (q.passage || "").length > 600;
     card.append(long
-      ? h("details", { class:"passage", open:true }, h("summary", null, "Passage"), h("div", { style:"margin-top:.5rem" }, q.passage))
-      : h("div", { class:"passage" }, q.passage));
+      ? h("details", { class:"passage", open:true }, h("summary", null, "Passage"), h("div", { style:"margin-top:.5rem" }, q.passage), pfigs.length ? h("div", { class:"qimgs", style:"margin:.6rem 0 0" }, pfigs) : null)
+      : h("div", { class:"passage" }, q.passage || null, pfigs.length ? h("div", { class:"qimgs", style:"margin:" + (q.passage ? ".6rem" : "0") + " 0 0" }, pfigs) : null));
   }
   const qbox = q.images && q.images.length ? h("div", { class:"qimgs" }, q.images.map((src, k) => figure(src, `Figure ${k+1}`))) : null;
+  const [tBefore, tAfter] = splitText(q);
   if (qbox && !q.imagesBelow) card.append(qbox);
-  card.append(h("div", { class:"qtext" }, q.text));
+  card.append(h("div", { class:"qtext" }, tBefore));
   if (qbox && q.imagesBelow) card.append(qbox);
+  if (tAfter) card.append(h("div", { class:"qtext" }, tAfter));
   if (q.type === "multi") card.append(h("p", { class:"small muted", style:"margin-top:-.6rem" }, "Select all that apply."));
 
   if (q.type === "numeric"){
@@ -1723,9 +1762,9 @@ function setPreview(arr){
     seen.add(f);
     const old = existing.get(f);
     if (!old) return true;
-    const gainsImg = (q.images || []).some(u => !(old.images || []).includes(u));
+    const gainsImg = (q.images || []).some(u => !(old.images || []).includes(u)) || (q.passageImages || []).some(u => !(old.passageImages || []).includes(u));
     const gainsOptImg = !!q.optionImages && JSON.stringify(q.optionImages) !== JSON.stringify(old.optionImages || null);
-    const gainsPassage = (q.passage && q.passage !== old.passage) || (!!q.imagesBelow !== !!old.imagesBelow && !!q.images);
+    const gainsPassage = (q.passage && q.passage !== old.passage) || (!!q.imagesBelow !== !!old.imagesBelow && !!q.images) || ((q.textAfter || "") !== (old.textAfter || "") && !!q.images);
     const gainsKey = !hasKey(old) && hasKey(q);
     if (gainsImg || gainsOptImg || gainsPassage || gainsKey) updates.push({ old, q });
     else dup++;
@@ -1794,10 +1833,11 @@ function commitImport(){
       old.optionImages = q.optionImages; old.options = q.options.slice();
       if (old.images) old.images = old.images.filter(u => !moved.has(u));
     }
+    if (q.passageImages){ old.passageImages = q.passageImages.slice(); if (old.images) old.images = old.images.filter(u => !q.passageImages.includes(u)); }
     if (q.images && q.images.length) old.images = [...new Set([...(q.images), ...(old.images || [])])];
     if (old.images && !old.images.length) delete old.images;
     if (q.passage) old.passage = q.passage;
-    if (q.images){ if (q.imagesBelow) old.imagesBelow = true; else delete old.imagesBelow; }
+    if (q.images){ if (q.imagesBelow) old.imagesBelow = true; else delete old.imagesBelow; if (q.textAfter) old.textAfter = q.textAfter; else delete old.textAfter; }
     if (q.set && !old.set){ old.set = q.set; old.seq = q.seq; }
     if (!hasKey(old) && hasKey(q)){ old.answer = q.answer; old.type = q.type; if (q.tolerance != null) old.tolerance = q.tolerance; }
   }
