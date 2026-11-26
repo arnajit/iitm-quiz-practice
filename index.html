@@ -161,6 +161,8 @@ textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .aibtn::before{content:"✦";margin-right:.35rem;color:var(--pen)}
 .ainote a{color:var(--pen);font-weight:700}
 .aiwrap{margin-top:.5rem}
+.aipics{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin-top:.1rem}
+.qfoot .aibar{flex-basis:100%}
 .chips{display:flex;flex-wrap:wrap;gap:.4rem;padding-left:1.6rem;align-items:center}
 .chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:.3rem .8rem;cursor:pointer;font-weight:700;font-size:.85rem;color:var(--muted)}
 .chip[aria-pressed="true"]{border-color:var(--pen);background:var(--pen-soft);color:var(--ink)}
@@ -250,7 +252,7 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
   </header>
   <main id="app" aria-live="polite"><p class="muted">Loading your subjects…</p></main>
   <p class="small muted" id="storeNote" style="margin-top:2.5rem"></p>
-  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 10</p>
+  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 11</p>
 </div>
 
 <script>
@@ -884,7 +886,7 @@ function aiPrompt(q, o){
       lines.push(`${LETTERS[pos]}. ${q.options[orig] || ""}`.trim() + (imgs.length ? (q.options[orig] ? " " : " ") + imgs.map((u, k) => /^https:\/\//i.test(u) ? `[image: ${u}]` : "[image I can't link]").join(" ") : ""));
     });
   }
-  if (figs.length) lines.push("", "Figures (open the links to see them):", ...figs);
+  if (figs.length) lines.push("", "Figures: I’ll paste them as one picture, labelled the same way (Figure 1, Option A, …). Links in case you can open them:", ...figs);
   if (o.mode !== "hint"){
     if (hasKey(q)) lines.push("", "Correct answer (from the answer key): " + (q.type === "numeric" ? String(q.answer) + (q.tolerance ? ` (accepted range ±${q.tolerance})` : "") : q.answer.map(a => `${L(a)}. ${optWords(a)}`).join("; ")));
     if (o.resp != null && answered(q, o.resp)){
@@ -895,6 +897,63 @@ function aiPrompt(q, o){
   }
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+// every picture a question uses, labelled the same way as the prompt
+function aiPictures(q, order){
+  order = order || (q.options || []).map((_, i) => i);
+  const list = [];
+  (q.passageImages || []).forEach((u, k) => list.push({ label: `Shared figure ${k+1}`, src: u }));
+  (q.images || []).forEach((u, k) => list.push({ label: `Figure ${k+1}`, src: u }));
+  if (q.type !== "numeric") order.forEach((orig, pos) => optImgs(q, orig).forEach((u, k, arr) => list.push({ label: `Option ${LETTERS[pos]}` + (arr.length > 1 ? ` (${k+1})` : ""), src: u })));
+  return list;
+}
+function loadForCanvas(src){
+  return new Promise(async (res, rej) => {
+    const local = await cachedFig(src);
+    const img = new Image();
+    if (!local && /^https:\/\//i.test(src)) img.crossOrigin = "anonymous";
+    img.onload = () => res(img); img.onerror = () => rej(new Error("load"));
+    if (!local && !/^https:\/\//i.test(src)) return rej(new Error("missing"));
+    img.src = local || src;
+  });
+}
+async function picturesBlob(list){
+  const imgs = [];
+  for (const it of list) imgs.push({ label: it.label, img: await loadForCanvas(it.src) });
+  const W = 960, pad = 24, labelH = 34, gap = 22, maxW = W - pad * 2;
+  const sized = imgs.map(x => { const sc = Math.min(1, maxW / x.img.naturalWidth, 520 / x.img.naturalHeight); return { ...x, w: Math.round(x.img.naturalWidth * sc), h: Math.round(x.img.naturalHeight * sc) }; });
+  const H = pad + sized.reduce((n, x) => n + labelH + x.h + gap, 0) + pad - gap;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  let y = pad;
+  for (const x of sized){
+    g.fillStyle = "#111"; g.font = "bold 22px system-ui, -apple-system, Segoe UI, sans-serif"; g.textBaseline = "top";
+    g.fillText(x.label, pad, y + 4); y += labelH;
+    g.drawImage(x.img, pad, y, x.w, x.h);
+    g.strokeStyle = "#ccc"; g.lineWidth = 1; g.strokeRect(pad - .5, y - .5, x.w + 1, x.h + 1);
+    y += x.h + gap;
+  }
+  return await new Promise((res, rej) => { try { c.toBlob(b => b ? res(b) : rej(new Error("blob")), "image/png"); } catch(e){ rej(e); } });
+}
+async function copyPictures(list, note){
+  note.textContent = "Putting the pictures together…";
+  let blob;
+  try { blob = await picturesBlob(list); }
+  catch(e){
+    const links = list.filter(x => /^https:\/\//i.test(x.src)).map(x => h("a", { href:x.src, target:"_blank", rel:"noopener noreferrer" }, x.label));
+    note.replaceChildren("The portal’s image server won’t let Drill combine these. Copy them one at a time instead: right-click a picture (here, or after opening it) → ",
+      h("strong", null, "Copy image"), " → paste into the chat. Tell the AI which label each one is. ",
+      links.length ? h("span", null, "Open: ", links.map((l, i) => [i ? " · " : "", l])) : null);
+    return;
+  }
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    note.replaceChildren(h("strong", null, "Pictures copied as one image. "), "Paste it into the chat with Ctrl+V, together with the text you pasted.");
+  } catch(e){
+    const a = h("a", { href: URL.createObjectURL(blob), download: "question-pictures.png" }, "Download the picture");
+    note.replaceChildren("This browser won’t put pictures on the clipboard. ", a, " and attach it in the chat.");
+  }
+}
 async function copyText(t){
   try { await navigator.clipboard.writeText(t); return true; }
   catch(e){
@@ -902,7 +961,7 @@ async function copyText(t){
     catch(e2){ return false; }
   }
 }
-function aiBar(getPrompt, label){
+function aiBar(getPrompt, label, getPictures){
   const wrap = h("span", { class:"aibar" });
   const btn = h("button", { class:"btn small aibtn", type:"button", onclick: async e => {
     e.stopPropagation();
@@ -916,9 +975,18 @@ function aiBar(getPrompt, label){
       link("ChatGPT", short ? "https://chatgpt.com/?q=" + enc : "https://chatgpt.com/"), " · ",
       link("Gemini", "https://gemini.google.com/app"));
     note.hidden = false;
+    const pics = getPictures ? getPictures() : [];
+    if (pics.length){
+      const picNote = h("span", { class:"small muted" });
+      picBox.replaceChildren(h("span", null, `This question has ${pics.length} picture${pics.length===1?"":"s"}. Some AI chats (like Gemini) can’t open links, so also `),
+        h("button", { class:"btn small", type:"button", onclick: e => { e.stopPropagation(); copyPictures(pics, picNote); } }, "Copy pictures"),
+        h("span", null, " and paste them in after the text. "), picNote);
+      picBox.hidden = false;
+    }
   } }, label || "Ask AI");
   const note = h("span", { class:"small muted ainote", hidden:true, "aria-live":"polite" });
-  wrap.append(btn, note);
+  const picBox = h("div", { class:"small muted aipics", hidden:true });
+  wrap.append(btn, note, picBox);
   return wrap;
 }
 
@@ -953,7 +1021,7 @@ function qCard(q, n, showKey, onRemove, subject){
     li.append(ol);
   }
   if (showKey && q.explanation) li.append(h("div", { class:"small muted", style:"white-space:pre-wrap" }, q.explanation));
-  if (subject !== false) li.append(h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: subject || "" }), "Explain with AI")));
+  if (subject !== false) li.append(h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: subject || "" }), "Explain with AI", () => aiPictures(q))));
   return li;
 }
 
@@ -1303,8 +1371,8 @@ function viewQuiz(){
   foot.append(h("span", { class:"spacer" }));
   const subjName = bank ? bank.name : "";
   foot.append(locked
-    ? aiBar(() => aiPrompt(q, { subject: subjName, order: item.order, resp: item.resp }), "Explain with AI")
-    : aiBar(() => aiPrompt(q, { subject: subjName, order: item.order, mode: "hint" }), "Hint from AI"));
+    ? aiBar(() => aiPrompt(q, { subject: subjName, order: item.order, resp: item.resp }), "Explain with AI", () => aiPictures(q, item.order))
+    : aiBar(() => aiPrompt(q, { subject: subjName, order: item.order, mode: "hint" }), "Hint from AI", () => aiPictures(q, item.order)));
   foot.append(h("button", { class:"btn ghost", onclick:()=>finish() }, instant ? "End session" : "Submit now"));
   card.append(foot);
   root.append(card);
@@ -1530,7 +1598,7 @@ function viewSession(){
       h("div", { class:"q" }, q.text),
       h("div", { class:"small" }, h("strong", null, "You: "), respLabel(q, it.resp)),
       it.ok === false ? h("div", { class:"small" }, h("strong", null, "Answer: "), keyLabel(q)) : null,
-      h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: S.banks[it.bankId].name, resp: it.resp }), "Explain with AI"))));
+      h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: S.banks[it.bankId].name, resp: it.resp }), "Explain with AI", () => aiPictures(q)))));
   });
   root.append(rev);
   return root;
@@ -1847,7 +1915,7 @@ function viewResults(){
       k && !ok ? h("div", { class:"small" }, h("strong", null, "Answer: "), lab(q.answer)) : null,
       !k ? h("div", { class:"small muted" }, "No answer key.") : null,
       q.explanation && !ok ? h("div", { class:"small muted", style:"white-space:pre-wrap" }, q.explanation) : null,
-      h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: S.banks[it.bankId] ? S.banks[it.bankId].name : "", order: it.order, resp: it.resp }), "Explain with AI"))
+      h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: S.banks[it.bankId] ? S.banks[it.bankId].name : "", order: it.order, resp: it.resp }), "Explain with AI", () => aiPictures(q, it.order)))
     ));
   });
   root.append(rev);
