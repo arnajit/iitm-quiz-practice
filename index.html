@@ -88,7 +88,7 @@ textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .empty{text-align:center;padding:2.2rem 1rem;border:2px dashed var(--line);border-radius:14px}
 
 /* quiz */
-.qhead{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.75rem}
+.qhead{display:flex;justify-content:space-between;align-items:center;gap:.5rem 1rem;margin-bottom:.4rem;flex-wrap:wrap}
 .qnum{font:800 1.05rem var(--display)}
 .progress{height:4px;background:var(--sunk);border-radius:2px;margin-bottom:1.2rem;overflow:hidden}
 .progress i{display:block;height:100%;background:var(--pen);transition:width .25s}
@@ -128,6 +128,19 @@ textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .verdict strong{font-family:var(--display)}
 .qfoot{display:flex;gap:.6rem;margin-top:1.3rem;flex-wrap:wrap;align-items:center}
 .palette{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:1.4rem}
+.palette.top{margin:.55rem 0 1.1rem}
+.palette button.ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.palette button.bad{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.qnav{display:flex;align-items:center;gap:.4rem}
+.navbtn{width:2.1rem;height:2.1rem;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font:700 1.2rem/1 var(--display);display:grid;place-items:center;padding:0 0 .12rem}
+.navbtn:hover:not(:disabled){border-color:var(--pen);color:var(--pen)}
+.navbtn:disabled{opacity:.35;cursor:default}
+.trackbox .progress{margin:.4rem 0 0}
+.trackline{display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:baseline;justify-content:space-between;font-size:.88rem}
+.legend{display:flex;flex-wrap:wrap;gap:.25rem .8rem;color:var(--muted);font-size:.78rem}
+.legend span{display:inline-flex;align-items:center;gap:.3rem}
+.dot{width:.7rem;height:.7rem;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);display:inline-block}
+.dot.ok{background:var(--ok-soft);border-color:var(--ok)} .dot.bad{background:var(--bad-soft);border-color:var(--bad)} .dot.answered{background:var(--pen-soft);border-color:var(--pen)}
 .palette button{width:2.1rem;height:2.1rem;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font-weight:700;font-size:.8rem}
 .palette button.answered{background:var(--pen-soft);border-color:var(--pen)}
 .palette button.current{outline:2.5px solid var(--ink);outline-offset:1px}
@@ -254,7 +267,7 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
   </header>
   <main id="app" aria-live="polite"><p class="muted">Loading your subjects…</p></main>
   <p class="small muted" id="storeNote" style="margin-top:2.5rem"></p>
-  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 12</p>
+  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 13</p>
 </div>
 
 <script>
@@ -1341,11 +1354,15 @@ function viewQuiz(){
   const locked = instant && item.checked;
   const root = h("div");
 
+  const attempted = ss.items.filter(it => it.checked || answered(it.q, it.resp)).length;
   root.append(
     h("div", { class:"qhead" },
-      h("span", { class:"qnum" }, `Question ${ss.idx+1} of ${total}`),
+      h("div", { class:"qnav" },
+        h("button", { class:"navbtn", type:"button", "aria-label":"Previous question", disabled: ss.idx === 0, onclick:()=>goTo(ss.idx - 1) }, "‹"),
+        h("span", { class:"qnum" }, `Question ${ss.idx+1} of ${total}`),
+        h("button", { class:"navbtn", type:"button", "aria-label":"Next question", disabled: ss.idx === total - 1, onclick:()=>goTo(ss.idx + 1) }, "›")),
       h("span", { class:"small muted" }, [bank ? bank.name : "", q.group, typeOf(q) !== "General" ? typeOf(q) : ""].filter(Boolean).join(", "))),
-    h("div", { class:"progress", role:"progressbar", "aria-valuemin":"0", "aria-valuemax":String(total), "aria-valuenow":String(ss.idx+1) }, h("i", { style:`width:${(ss.idx+1)/total*100}%` }))
+    tracker(ss, instant, attempted)
   );
   const card = h("div", { class:"panel" });
   if (q.passage || q.passageImages){
@@ -1366,7 +1383,8 @@ function viewQuiz(){
   if (q.type === "numeric"){
     const input = h("input", { type:"text", inputmode:"decimal", value:item.resp, disabled:locked, placeholder:"Your answer", "aria-label":"Your answer", style:"max-width:14rem",
       oninput:e=>{ item.resp = e.target.value.trim(); updateButtons(); },
-      onkeydown:e=>{ if (e.key === "Enter"){ e.preventDefault(); primaryAction(); } } });
+      onkeydown:e=>{ if (e.key === "Enter"){ e.preventDefault(); primaryAction(); }
+        else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.target.value){ e.preventDefault(); goTo(ss.idx + (e.key === "ArrowLeft" ? -1 : 1)); } } });
     card.append(input);
     if (locked && hasKey(q)) card.append(h("p", { class:"small" }, "Correct answer: ", h("strong", null, String(q.answer))));
     setTimeout(()=>{ if (!locked) input.focus(); }, 0);
@@ -1406,9 +1424,9 @@ function viewQuiz(){
 
   const foot = h("div", { class:"qfoot" });
   const mainBtn = h("button", { class:"btn primary", id:"mainBtn", onclick:primaryAction });
-  if (!instant && ss.idx > 0) foot.append(h("button", { class:"btn", onclick:()=>{ ss.idx--; render(); } }, "Previous"));
   foot.append(mainBtn);
-  if (instant && !locked) foot.append(h("button", { class:"btn ghost", onclick:()=>{ item.checked = true; recordStat(item); render(); } }, "Skip and show answer"));
+  if (!locked && ss.idx < total - 1) foot.append(h("button", { class:"btn ghost", onclick:()=>goTo(ss.idx + 1) }, "Skip for now"));
+  if (instant && !locked) foot.append(h("button", { class:"btn ghost", onclick:()=>{ item.checked = true; recordStat(item); render(); } }, "Show answer"));
   foot.append(h("span", { class:"spacer" }));
   const subjName = bank ? bank.name : "";
   foot.append(locked
@@ -1418,17 +1436,13 @@ function viewQuiz(){
   card.append(foot);
   root.append(card);
 
-  if (!instant){
-    const pal = h("div", { class:"palette", "aria-label":"Jump to question" });
-    ss.items.forEach((it, i) => pal.append(h("button", { class:(answered(it.q, it.resp) ? "answered " : "") + (i===ss.idx ? "current" : ""), "aria-label":`Question ${i+1}`, onclick:()=>{ ss.idx = i; render(); } }, String(i+1))));
-    root.append(pal);
-  }
-  root.append(h("p", { class:"kbd" }, q.type === "numeric" ? "Press Enter to continue." : "Keys: A–" + LETTERS[Math.max(0,(q.options||[]).length-1)] + " or 1–" + (q.options||[]).length + " to choose, Enter to continue."));
+  root.append(h("p", { class:"kbd" }, (q.type === "numeric" ? "Enter to continue" : "Keys: A–" + LETTERS[Math.max(0,(q.options||[]).length-1)] + " or 1–" + (q.options||[]).length + " to choose, Enter to continue") + ", ← → to move between questions."));
 
   function updateButtons(){
     const has = answered(q, item.resp);
     if (instant){
-      mainBtn.textContent = locked ? (ss.idx === total-1 ? "See results" : "Next question") : "Check answer";
+      const left = ss.items.filter(it => !it.checked && !answered(it.q, it.resp)).length;
+      mainBtn.textContent = locked ? (ss.idx === total-1 ? (left ? `Go to skipped (${left})` : "See results") : "Next question") : "Check answer";
       mainBtn.disabled = !locked && !has;
     } else {
       mainBtn.textContent = ss.idx === total-1 ? "Submit" : "Next";
@@ -1437,6 +1451,36 @@ function viewQuiz(){
   }
   updateButtons();
   return root;
+}
+function tracker(ss, instant, attempted){
+  const total = ss.items.length;
+  const pal = h("div", { class:"palette top", role:"navigation", "aria-label":"Questions" });
+  ss.items.forEach((it, i) => {
+    let st = "", word = "not attempted";
+    if (instant && it.checked && hasKey(it.q)){ const ok = isCorrect(it.q, it.resp); st = ok ? "ok" : "bad"; word = ok ? "right" : answered(it.q, it.resp) ? "wrong" : "answer shown"; }
+    else if (instant && it.checked){ st = "answered"; word = "checked"; }
+    else if (answered(it.q, it.resp)){ st = "answered"; word = instant ? "answered, not checked" : "answered"; }
+    pal.append(h("button", { type:"button", class: st + (i === ss.idx ? " current" : ""), "aria-label":`Question ${i+1}, ${word}`, "aria-current": i === ss.idx ? "step" : null, title:`Question ${i+1}: ${word}`, onclick:()=>goTo(i) }, String(i+1)));
+  });
+  const legend = instant
+    ? [["ok","right"],["bad","wrong"],["answered","answered, not checked"],["","not attempted"]]
+    : [["answered","answered"],["","not attempted"]];
+  return h("div", { class:"trackbox" },
+    h("div", { class:"trackline" }, h("strong", null, `Attempted ${attempted} of ${total}`),
+      h("span", { class:"legend" }, legend.map(([c, t]) => h("span", null, h("i", { class:"dot " + c }), t)))),
+    h("div", { class:"progress", role:"progressbar", "aria-label":"Attempted", "aria-valuemin":"0", "aria-valuemax":String(total), "aria-valuenow":String(attempted) }, h("i", { style:`width:${attempted/total*100}%` })),
+    pal);
+}
+function goTo(i){
+  const ss = S.session; if (!ss) return;
+  if (i < 0 || i >= ss.items.length || i === ss.idx) return;
+  ss.idx = i; render(); window.scrollTo(0, 0);
+}
+function nextOpen(ss, from){
+  // the next question not yet attempted, searching forward then wrapping
+  const n = ss.items.length;
+  for (let k = 1; k <= n; k++){ const i = (from + k) % n; const it = ss.items[i]; if (!it.checked && !answered(it.q, it.resp)) return i; }
+  return -1;
 }
 function pick(orig){
   const ss = S.session; const item = ss.items[ss.idx];
@@ -1450,11 +1494,11 @@ function primaryAction(){
   const item = ss.items[ss.idx];
   if (ss.mode === "instant"){
     if (!item.checked){ if (!answered(item.q, item.resp)) return; item.checked = true; recordStat(item); render(); return; }
-    if (ss.idx === ss.items.length-1) return finish();
-    ss.idx++; render(); window.scrollTo(0,0); return;
+    if (ss.idx === ss.items.length-1){ const j = nextOpen(ss, ss.idx); if (j >= 0) return goTo(j); return finish(); }
+    goTo(ss.idx + 1); return;
   }
-  if (ss.idx === ss.items.length-1){ const left = ss.items.filter(it=>!answered(it.q,it.resp)).length; if (left && !confirm(`${left} question${left===1?"":"s"} unanswered. Submit anyway?`)) return; return finish(); }
-  ss.idx++; render(); window.scrollTo(0,0);
+  if (ss.idx === ss.items.length-1) return finish();
+  goTo(ss.idx + 1);
 }
 function saveAsKey(item){
   const b = S.banks[item.bankId]; if (!b) return;
@@ -1465,7 +1509,12 @@ function saveAsKey(item){
 }
 function finish(){
   const ss = S.session;
+  const untouched = ss.items.filter(it => !it.checked && !answered(it.q, it.resp)).length;
+  if (untouched && !confirm(ss.mode === "exam"
+      ? `${untouched} question${untouched===1?" is":"s are"} unanswered and will count as wrong. Submit anyway?`
+      : `${untouched} question${untouched===1?" hasn’t":"s haven’t"} been attempted. They’ll be listed as skipped and won’t count. End the session?`)) return;
   if (ss.mode === "exam") ss.items.forEach(it => { if (!it.checked){ it.checked = true; recordStat(it); } });
+  else ss.items.forEach(it => { if (!it.checked && answered(it.q, it.resp)){ it.checked = true; recordStat(it); } });
   ss.finished = true; ss.ended = Date.now();
   const touched = new Set(ss.items.map(i=>i.bankId));
   touched.forEach(id => store.saveStats(id));
@@ -1478,6 +1527,8 @@ document.addEventListener("keydown", e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const item = S.session.items[S.session.idx];
   if (e.key === "Enter"){ e.preventDefault(); primaryAction(); return; }
+  if (e.key === "ArrowLeft"){ e.preventDefault(); goTo(S.session.idx - 1); return; }
+  if (e.key === "ArrowRight"){ e.preventDefault(); goTo(S.session.idx + 1); return; }
   if (item.q.type === "numeric") return;
   let pos = -1;
   if (/^[1-9]$/.test(e.key)) pos = Number(e.key) - 1;
@@ -1929,17 +1980,20 @@ async function doRestore(){
 function fmtDur(ms){ const s = Math.round(ms/1000); const m = Math.floor(s/60); return m ? `${m} min ${s%60} s` : `${s} s`; }
 function viewResults(){
   const ss = S.session; if (!ss) return viewLibrary();
-  const keyed = ss.items.filter(it => hasKey(it.q));
+  const done = ss.items.filter(it => it.checked);
+  const skippedItems = ss.items.filter(it => !it.checked);
+  const keyed = done.filter(it => hasKey(it.q));
   const right = keyed.filter(it => isCorrect(it.q, it.resp));
-  const wrong = ss.items.filter(it => hasKey(it.q) && !isCorrect(it.q, it.resp));
+  const wrong = done.filter(it => hasKey(it.q) && !isCorrect(it.q, it.resp)).concat(skippedItems);
   const pct = keyed.length ? Math.round(right.length / keyed.length * 100) : 0;
   const root = h("div", { class:"stack" },
     h("div", { class:"panel" },
       h("div", { class:"score" }, `${right.length}/${keyed.length} `, h("small", null, `${pct}%`)),
       h("p", { class:"muted" }, `Finished in ${fmtDur(ss.ended - ss.started)}.`,
-        ss.items.length > keyed.length ? ` ${ss.items.length - keyed.length} question${ss.items.length-keyed.length===1?" had":"s had"} no answer key and ${ss.items.length-keyed.length===1?"isn’t":"aren’t"} counted.` : ""),
+        done.length > keyed.length ? ` ${done.length - keyed.length} question${done.length-keyed.length===1?" had":"s had"} no answer key and ${done.length-keyed.length===1?"isn’t":"aren’t"} counted.` : "",
+        skippedItems.length ? ` ${skippedItems.length} skipped, not counted.` : ""),
       h("div", { class:"row", style:"margin-top:.8rem" },
-        wrong.length ? h("button", { class:"btn primary", onclick:()=>{ S.session = { items: shuffle(wrong).map(it => buildItem({ bankId:it.bankId, q:it.q }, ss.settings.shuffleOpts)), idx:0, mode:ss.mode, started:Date.now(), finished:false, settings:ss.settings }; go("quiz"); } }, `Retry the ${wrong.length} I missed`) : null,
+        wrong.length ? h("button", { class:"btn primary", onclick:()=>{ S.session = { items: shuffle(wrong).map(it => buildItem({ bankId:it.bankId, q:it.q }, ss.settings.shuffleOpts)), idx:0, mode:ss.mode, started:Date.now(), finished:false, settings:ss.settings }; go("quiz"); } }, skippedItems.length ? `Retry the ${wrong.length} missed or skipped` : `Retry the ${wrong.length} I missed`) : null,
         h("button", { class:"btn", onclick:()=> ss.entries ? practiceEntries(ss.entries, ss.label) : startSession(poolFor(ss.settings), ss.settings) }, "Same settings, new shuffle"),
         h("button", { class:"btn ghost", onclick:()=>go("stats") }, "See stats"),
         h("button", { class:"btn ghost", onclick:()=>go("setup") }, "Change settings"))
@@ -1947,14 +2001,14 @@ function viewResults(){
   );
   const rev = h("div", { class:"panel" }, h("h2", { style:"margin-bottom:.8rem" }, "Review"));
   ss.items.forEach((it, i) => {
-    const q = it.q; const k = hasKey(q); const ok = k && isCorrect(q, it.resp);
+    const q = it.q; const k = hasKey(q) && it.checked; const ok = k && isCorrect(q, it.resp);
     const lab = v => q.type === "numeric" ? String(v) : v.map(a => `${LETTERS[it.order.indexOf(a)]}. ${optText(q, a)}`).join("; ");
     rev.append(h("div", { class:"rev " + (k ? (ok ? "ok" : "bad") : "") },
       h("div", { class:"small muted" }, `Question ${i+1}`, q.group ? `, ${q.group}` : ""),
       h("div", { class:"q" }, q.text),
       h("div", { class:"small" }, h("strong", null, "You: "), answered(q, it.resp) ? lab(it.resp) : "skipped"),
       k && !ok ? h("div", { class:"small" }, h("strong", null, "Answer: "), lab(q.answer)) : null,
-      !k ? h("div", { class:"small muted" }, "No answer key.") : null,
+      !it.checked ? h("div", { class:"small muted" }, "Skipped, not counted.") : !k ? h("div", { class:"small muted" }, "No answer key.") : null,
       q.explanation && !ok ? h("div", { class:"small muted", style:"white-space:pre-wrap" }, q.explanation) : null,
       h("div", { class:"aiwrap" }, aiBar(() => aiPrompt(q, { subject: S.banks[it.bankId] ? S.banks[it.bankId].name : "", order: it.order, resp: it.resp }), "Explain with AI", () => aiPictures(q, it.order)))
     ));
