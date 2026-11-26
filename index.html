@@ -380,6 +380,9 @@ function portalDecodeEntities(s){
 function portalHtml(html){
   const images = [];
   let s = String(html || "");
+  // does the first picture come after some text? ("The figure below shows…")
+  const firstImg = s.search(/<img\b/i);
+  const after = firstImg > 0 && portalDecodeEntities(s.slice(0, firstImg).replace(/<[^>]+>/g, " ")).replace(/\s+/g, "").length > 0;
   // math: <gcb-math>..</gcb-math>, also tolerate a second opening tag used as the closer
   s = s.replace(/<gcb-math[^>]*>([\s\S]*?)<\/?gcb-math>/gi, (_, m) => " \\(" + portalDecodeEntities(m).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim() + "\\) ");
   s = s.replace(/<img\b[^>]*>/gi, tag => {
@@ -389,14 +392,14 @@ function portalHtml(html){
     if (/^http:\/\//i.test(src)) src = "https://" + src.slice(7);
     if (!/^https:\/\//i.test(src) && dp) src = "https://storage.googleapis.com/" + dp.replace(/^\/+/, "");
     else if (!/^https:\/\//i.test(src) && src && !/^data:/i.test(src)) src = "https://seek.onlinedegree.iitm.ac.in/" + src.replace(/^\/+/, "");
-    if (/^https:\/\//i.test(src)) images.push(src);
+    if (/^https:\/\//i.test(src) || /^data:image\//i.test(src)) images.push(src.replace(/\s+/g, ""));
     return "\n";
   });
   s = s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/?(div|p|li|ul|ol|tr|table|h\d)\b[^>]*>/gi, "\n").replace(/<td\b[^>]*>/gi, " ").replace(/<[^>]+>/g, "");
   s = portalDecodeEntities(s).replace(/\t/g," ").replace(/[ \u00a0]+/g," ");
   s = s.split("\n").map(l => l.trim()).join("\n").replace(/\n{3,}/g, "\n\n").trim();
   s = s.replace(/(\\\)) +([,.;:?!)])/g, "$1$2").replace(/ +(\\\))/g, "$1").replace(/(\\\() +/g, "$1").replace(/\( \\\(/g,"(\\(");
-  return { text: s, images };
+  return { text: s, images, after };
 }
 function portalFindHtml(it){
   // content blocks name their HTML differently; take the likeliest field, else any HTML-looking string
@@ -439,6 +442,7 @@ function portalConvert(data){
     const hm = text.match(/^paragraph\s+for\s+questions?\s*(\d+)\s*(?:[-–to]+\s*(\d+))?\s*:?\s*/i);
     if (hm){ header = { a: +hm[1], b: +(hm[2] || hm[1]) }; text = text.slice(hm[0].length).trim(); }
     const item = { id: "p" + (q.id || r.instance || i), group, images: p.images, source: title };
+    if (p.after && p.images.length) item.imagesBelow = true;
     if (header){
       const blocks = text.split(/\n\n+/);
       if (blocks.length > 1){ passage = blocks.slice(0, -1).join("\n\n"); text = blocks[blocks.length - 1]; }
@@ -495,7 +499,7 @@ function portalConvert(data){
     const c = x._ctx; if (!c) continue;
     if (c.text && !(x.passage || "").includes(c.text)) x.passage = x.passage ? c.text + "\n\n" + x.passage : c.text;
     const imgs = c.images.filter(u => !x.images.includes(u));
-    if (imgs.length) x.images = imgs.concat(x.images);
+    if (imgs.length){ x.images = imgs.concat(x.images); delete x.imagesBelow; }
     if (!x.set && ctxCount[c.id] > 1){ x.set = c.id + "-" + data.id; x.seq = x._pos; }
   }
   out.forEach(x => { delete x._header; delete x._pos; delete x._ctx; if (!x.images.length) delete x.images; });
@@ -519,6 +523,48 @@ function portalExtractAll(v){
   return found;
 }
 
+/* ---------- embedded pictures: data: URLs become small "drill-fig:" references ---------- */
+const isFigRef = u => /^https:\/\//i.test(u) || /^drill-fig:[a-z0-9]+$/i.test(u);
+function figHash(str){ let h1 = 0x811c9dc5, h2 = 0; for (let i = 0; i < str.length; i++){ const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = (h2 * 31 + c) >>> 0; } return h1.toString(36) + h2.toString(36) + str.length.toString(36); }
+async function storeEmbedded(dataUrl){
+  const ref = "drill-fig:" + figHash(dataUrl);
+  if (!figURLs.has(ref)){
+    figURLs.set(ref, dataUrl);
+    let ok = false;
+    try { ok = await figStore.put(ref, await dataURLToBlob(dataUrl)); } catch(e){}
+    if (!ok){ try { localStorage.setItem(figKey(ref), dataUrl); } catch(e){} }
+  }
+  return ref;
+}
+async function internalizeFigures(qs){
+  // swap any embedded data: pictures for references, keeping the pictures in the figure store
+  for (const q of qs){
+    if (!q || typeof q !== "object") continue;
+    if (Array.isArray(q.images)) for (let i = 0; i < q.images.length; i++) if (/^data:image\//i.test(q.images[i])) q.images[i] = await storeEmbedded(q.images[i]);
+    if (Array.isArray(q.optionImages)) for (const arr of q.optionImages) if (Array.isArray(arr)) for (let i = 0; i < arr.length; i++) if (/^data:image\//i.test(arr[i])) arr[i] = await storeEmbedded(arr[i]);
+  }
+}
+const figRefsOf = qs => { const set = new Set(); for (const q of qs){ (q.images || []).forEach(u => set.add(u)); (q.optionImages || []).forEach(a => (a || []).forEach(u => set.add(u))); } return [...set]; };
+async function collectFigures(qs, onlyEmbedded){
+  const out = {};
+  for (const u of figRefsOf(qs)){
+    if (onlyEmbedded && !u.startsWith("drill-fig:")) continue;
+    const d = await cachedFig(u);
+    if (d) out[u] = d;
+  }
+  return out;
+}
+async function absorbFigures(figs){
+  for (const [u, d] of Object.entries(figs || {})){
+    if (!isFigRef(u) || !/^data:image\//i.test(String(d)) || figURLs.has(u)) continue;
+    if (await figStore.get(u)) continue;
+    figURLs.set(u, d);
+    let ok = false;
+    try { ok = await figStore.put(u, await dataURLToBlob(d)); } catch(e){}
+    if (!ok){ try { localStorage.setItem(figKey(u), d); } catch(e){} }
+  }
+}
+
 /* ---------- question helpers ---------- */
 function validQ(q){
   if (!q || typeof q !== "object" || !String(q.text||"").trim()) return null;
@@ -530,8 +576,9 @@ function validQ(q){
     text: String(q.text).trim(),
     explanation: String(q.explanation || "").trim(),
   };
-  if (Array.isArray(q.images)){ const im = q.images.map(String).filter(u => /^https:\/\//i.test(u)).slice(0, 8); if (im.length) out.images = im; }
+  if (Array.isArray(q.images)){ const im = q.images.map(String).filter(isFigRef).slice(0, 8); if (im.length) out.images = im; }
   if (q.set){ out.set = String(q.set); out.seq = Number(q.seq) || 0; }
+  if (q.imagesBelow && out.images) out.imagesBelow = true;
   if (q.source) out.source = String(q.source);
   if (type === "numeric"){
     const a = Number(q.answer);
@@ -540,7 +587,7 @@ function validQ(q){
   } else {
     const oi = Array.isArray(q.optionImages) ? q.optionImages : [];
     const pairs = (q.options||[]).map((o, i) => ({ t: String(o == null ? "" : o).trim().replace(/^\(blank option\)$/, ""),
-      im: (Array.isArray(oi[i]) ? oi[i] : []).map(String).filter(u => /^https:\/\//i.test(u)).slice(0, 4) }));
+      im: (Array.isArray(oi[i]) ? oi[i] : []).map(String).filter(isFigRef).slice(0, 4) }));
     if (pairs.length < 2 || pairs.every(x => !x.t && !x.im.length)) return null;
     out.options = pairs.map(x => x.t);
     if (pairs.some(x => x.im.length)) out.optionImages = pairs.map(x => x.im);
@@ -707,6 +754,7 @@ function figure(src, label, cls){
       ondragover: e => { e.preventDefault(); zone.classList.add("over"); }, ondragleave: () => zone.classList.remove("over"),
       ondrop: async e => { e.preventDefault(); zone.classList.remove("over"); const f = [...e.dataTransfer.files].find(f => /^image\//.test(f.type)); if (f) await accept(f); } },
       h("strong", null, `${label} didn’t load here.`),
+      src.startsWith("drill-fig:") ? h("p", { class:"small", style:"margin:.3rem 0" }, "This picture was embedded in the portal’s response and isn’t on this device yet. Re-import that week here, or open the Sheet tab and press “Get my data from the Sheet”.") : null,
       inPreview ? h("p", { class:"small", style:"margin:.3rem 0" }, "You’re viewing Drill inside a preview, which blocks outside images. Download drill.html and open it directly in Chrome, and figures load by themselves.") : null,
       h("ol", { class:"fig-steps" },
         h("li", null, /^https:\/\//i.test(src) ? h("a", { href:src, target:"_blank", rel:"noopener noreferrer" }, "Open it in a new tab") : "Open it in a new tab", ", right-click the image → Copy image."),
@@ -719,7 +767,7 @@ function figure(src, label, cls){
     wrap.replaceChildren(zone);
   };
   wrap._src = src;
-  wrap._reload = async () => { const c = await cachedFig(src); if (c){ const img = h("img", { alt:label }); img.src = c; wrap.replaceChildren(img); } else { tries = 0; show(src); } };
+  wrap._reload = async () => { const c = await cachedFig(src); if (c){ const img = h("img", { alt:label }); img.src = c; wrap.replaceChildren(img); } else if (src.startsWith("drill-fig:")) { fallback(); } else { tries = 0; show(src); } };
   wrap._reload();
   return wrap;
 }
@@ -736,8 +784,10 @@ function qCard(q, n, showKey, onRemove){
     onRemove ? h("button", { class:"btn ghost danger small", "aria-label":`Remove question ${n}`, onclick:onRemove }, "Remove") : null);
   li.append(head);
   if (q.passage) li.append(h("details", { class:"qc-passage" }, h("summary", null, "Shared paragraph"), h("div", null, q.passage)));
-  if (q.images) q.images.forEach((src, k) => li.append(figure(src, `Figure ${k+1}`, "qc-img")));
+  const figs = (q.images || []).map((src, k) => figure(src, `Figure ${k+1}`, "qc-img"));
+  if (!q.imagesBelow) figs.forEach(f => li.append(f));
   li.append(h("div", { class:"qc-text" }, q.text));
+  if (q.imagesBelow) figs.forEach(f => li.append(f));
   if (q.type === "numeric"){
     li.append(h("div", { class:"small muted" }, "Numeric answer" + (showKey && hasKey(q) ? `: ${q.answer}` + (q.tolerance ? ` (±${q.tolerance})` : "") : "")));
   } else {
@@ -835,12 +885,7 @@ function viewManage(){
   return root;
 }
 async function exportBank(b){
-  const figures = {};
-  for (const q of b.questions) for (const u of (q.images || [])){
-    if (figures[u]) continue;
-    const blob = await figStore.get(u);
-    if (blob) { try { figures[u] = await blobToDataURL(blob); } catch(e){} }
-  }
+  const figures = await collectFigures(b.questions, false);
   const data = JSON.stringify(Object.keys(figures).length ? { name: b.name, questions: b.questions, figures } : { name: b.name, questions: b.questions }, null, 2);
   const status = document.getElementById("exportStatus");
   if (downloads){
@@ -1013,12 +1058,10 @@ function viewQuiz(){
       ? h("details", { class:"passage", open:true }, h("summary", null, "Passage"), h("div", { style:"margin-top:.5rem" }, q.passage))
       : h("div", { class:"passage" }, q.passage));
   }
-  if (q.images && q.images.length){
-    const box = h("div", { class:"qimgs" });
-    q.images.forEach((src, k) => box.append(figure(src, `Figure ${k+1}`)));
-    card.append(box);
-  }
+  const qbox = q.images && q.images.length ? h("div", { class:"qimgs" }, q.images.map((src, k) => figure(src, `Figure ${k+1}`))) : null;
+  if (qbox && !q.imagesBelow) card.append(qbox);
   card.append(h("div", { class:"qtext" }, q.text));
+  if (qbox && q.imagesBelow) card.append(qbox);
   if (q.type === "multi") card.append(h("p", { class:"small muted", style:"margin-top:-.6rem" }, "Select all that apply."));
 
   if (q.type === "numeric"){
@@ -1331,7 +1374,9 @@ const sheet = {
     if (!Object.keys(S.banks).length && !(S.history || []).length){ if (!quiet) this.status = "Nothing here to back up yet. Use “Get my data from the Sheet” first."; if (S.view === "sheet") render(); return false; }
     try {
       await this.flush();
-      await this.call({ action:"saveState", state: this.state() });
+      const st = this.state();
+      try { st.figures = await collectFigures(Object.values(S.banks).flatMap(b => b.questions), true); } catch(e){}
+      await this.call({ action:"saveState", state: st });
       this.cfg.lastBackup = Date.now(); this.cfg.lastError = ""; this.saveCfg();
       if (!quiet) this.status = "Backed up to your Sheet.";
       return true;
@@ -1531,6 +1576,7 @@ function viewSheet(){
 function mergeState(remote){
   // union of both sides; nothing on either side is lost
   const r = remote || {}; let addedQ = 0, addedS = 0;
+  if (r.figures) absorbFigures(r.figures).then(() => { if (["manage","quiz","library"].includes(S.view)) render(); });
   for (const [id, rb] of Object.entries(r.banks || {})){
     const lb = S.banks[id];
     if (!lb){ S.banks[id] = rb; addedQ += (rb.questions || []).length; continue; }
@@ -1644,7 +1690,7 @@ async function readJsonFiles(files){
   if (bad.length && !vals.length){ im.status = `Couldn’t read ${bad.join(", ")} as JSON.`; im.err = true; render(); return; }
   ingestJson(vals, bad);
 }
-function ingestJson(vals, bad){
+async function ingestJson(vals, bad){
   const im = S.imp; const all = []; const notes = [];
   for (const v of vals){
     const portal = portalExtractAll(v);
@@ -1653,13 +1699,12 @@ function ingestJson(vals, bad){
       continue;
     }
     if (v && v.log) { notes.push("That HAR file had no assignment responses in it."); continue; }
-    if (v && v.figures && typeof v.figures === "object"){
-      for (const [u, d] of Object.entries(v.figures)){ if (/^https:\/\//i.test(u) && /^data:image\//i.test(String(d))) dataURLToBlob(d).then(bl => figStore.put(u, bl)).catch(()=>{}); }
-    }
+    if (v && v.figures && typeof v.figures === "object") await absorbFigures(v.figures);
     const arr = Array.isArray(v) ? v : (v && v.questions) || [];
     if (!Array.isArray(v) && v && v.name && im.target === "__new" && !im.newName) im.newName = v.name;
     all.push(...arr);
   }
+  await internalizeFigures(all);
   setPreview(all);
   const extra = (notes.length ? " " + notes.join("; ") + "." : "") + (bad && bad.length ? ` Couldn’t read ${bad.join(", ")}.` : "");
   if (extra){ im.status = (im.status + extra).trim(); render(); }
@@ -1680,7 +1725,7 @@ function setPreview(arr){
     if (!old) return true;
     const gainsImg = (q.images || []).some(u => !(old.images || []).includes(u));
     const gainsOptImg = !!q.optionImages && JSON.stringify(q.optionImages) !== JSON.stringify(old.optionImages || null);
-    const gainsPassage = q.passage && q.passage !== old.passage;
+    const gainsPassage = (q.passage && q.passage !== old.passage) || (!!q.imagesBelow !== !!old.imagesBelow && !!q.images);
     const gainsKey = !hasKey(old) && hasKey(q);
     if (gainsImg || gainsOptImg || gainsPassage || gainsKey) updates.push({ old, q });
     else dup++;
@@ -1752,6 +1797,7 @@ function commitImport(){
     if (q.images && q.images.length) old.images = [...new Set([...(q.images), ...(old.images || [])])];
     if (old.images && !old.images.length) delete old.images;
     if (q.passage) old.passage = q.passage;
+    if (q.images){ if (q.imagesBelow) old.imagesBelow = true; else delete old.imagesBelow; }
     if (q.set && !old.set){ old.set = q.set; old.seq = q.seq; }
     if (!hasKey(old) && hasKey(q)){ old.answer = q.answer; old.type = q.type; if (q.tolerance != null) old.tolerance = q.tolerance; }
   }
