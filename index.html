@@ -161,6 +161,8 @@ textarea{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-s
 .aibtn::before{content:"✦";margin-right:.35rem;color:var(--pen)}
 .ainote a{color:var(--pen);font-weight:700}
 .aiwrap{margin-top:.5rem}
+.aimanual{flex-basis:100%}
+.aitext{width:100%;min-height:8rem;font-size:16px;margin-top:.3rem}
 .aipics{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin-top:.1rem}
 .qfoot .aibar{flex-basis:100%}
 .chips{display:flex;flex-wrap:wrap;gap:.4rem;padding-left:1.6rem;align-items:center}
@@ -252,7 +254,7 @@ mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden}
   </header>
   <main id="app" aria-live="polite"><p class="muted">Loading your subjects…</p></main>
   <p class="small muted" id="storeNote" style="margin-top:2.5rem"></p>
-  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 11</p>
+  <p class="small muted" style="margin-top:.4rem;opacity:.7">Drill version 2026-11-26 · 12</p>
 </div>
 
 <script>
@@ -937,56 +939,95 @@ async function picturesBlob(list){
 }
 async function copyPictures(list, note){
   note.textContent = "Putting the pictures together…";
-  let blob;
-  try { blob = await picturesBlob(list); }
-  catch(e){
+  const made = picturesBlob(list);
+  made.catch(() => {});
+  const fallbackLinks = () => {
     const links = list.filter(x => /^https:\/\//i.test(x.src)).map(x => h("a", { href:x.src, target:"_blank", rel:"noopener noreferrer" }, x.label));
-    note.replaceChildren("The portal’s image server won’t let Drill combine these. Copy them one at a time instead: right-click a picture (here, or after opening it) → ",
-      h("strong", null, "Copy image"), " → paste into the chat. Tell the AI which label each one is. ",
-      links.length ? h("span", null, "Open: ", links.map((l, i) => [i ? " · " : "", l])) : null);
-    return;
-  }
+    note.replaceChildren("The portal’s image server won’t let Drill combine these. Copy them one at a time instead: open a picture, long-press or right-click it → ",
+      h("strong", null, "Copy image"), " → paste into the chat, and say which label it is. ",
+      links.length ? h("span", null, "Open: ", links.map((l, i) => [i ? " · " : "", l])) : "");
+  };
+  const download = blob => {
+    const a = h("a", { href: URL.createObjectURL(blob), download: "question-pictures.png" }, "Save the picture");
+    note.replaceChildren("This browser won’t put pictures on the clipboard. ", a, " and attach it in the chat (or use Share to app).");
+  };
   try {
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    note.replaceChildren(h("strong", null, "Pictures copied as one image. "), "Paste it into the chat with Ctrl+V, together with the text you pasted.");
+    // Safari only allows this if the clipboard write starts during the tap, so hand it the unfinished picture
+    let item;
+    try { item = new ClipboardItem({ "image/png": made }); } catch(e){ item = null; }
+    if (item) await navigator.clipboard.write([item]);
+    else { const blob = await made; await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); }
+    note.replaceChildren(h("strong", null, "Pictures copied as one image. "), "Paste it into the chat, together with the text.");
   } catch(e){
-    const a = h("a", { href: URL.createObjectURL(blob), download: "question-pictures.png" }, "Download the picture");
-    note.replaceChildren("This browser won’t put pictures on the clipboard. ", a, " and attach it in the chat.");
+    let blob = null;
+    try { blob = await made; } catch(e2){ fallbackLinks(); return; }
+    download(blob);
   }
 }
-async function copyText(t){
-  try { await navigator.clipboard.writeText(t); return true; }
-  catch(e){
-    try { const ta = h("textarea", { style:"position:fixed;opacity:0;top:0;left:0" }); ta.value = t; document.body.append(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok; }
-    catch(e2){ return false; }
+function copyTextNow(t){
+  // must be called directly inside the tap handler (phones are strict about this)
+  const legacy = () => {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = t; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px";
+      document.body.append(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+      const ok = document.execCommand("copy"); ta.remove(); return ok;
+    } catch(e){ return false; }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(t).then(() => true, () => legacy());
   }
+  return Promise.resolve(legacy());
 }
+async function copyText(t){ return copyTextNow(t); }
 function aiBar(getPrompt, label, getPictures){
   const wrap = h("span", { class:"aibar" });
-  const btn = h("button", { class:"btn small aibtn", type:"button", onclick: async e => {
+  const note = h("span", { class:"small muted ainote", hidden:true, "aria-live":"polite" });
+  const picBox = h("div", { class:"small muted aipics", hidden:true });
+  const manual = h("div", { class:"aimanual", hidden:true });
+  const canShare = typeof navigator.share === "function";
+  const btn = h("button", { class:"btn small aibtn", type:"button", onclick: e => {
     e.stopPropagation();
     const t = getPrompt();
-    const ok = await copyText(t);
-    const enc = encodeURIComponent(t);
-    const short = enc.length < 7000;
-    const link = (name, url) => h("a", { href: url, target:"_blank", rel:"noopener noreferrer" }, name);
-    note.replaceChildren(ok ? "Copied. Paste it into any AI chat, or open: " : "Couldn’t copy automatically. Open one of these: ",
-      link("Claude", short ? "https://claude.ai/new?q=" + enc : "https://claude.ai/new"), " · ",
-      link("ChatGPT", short ? "https://chatgpt.com/?q=" + enc : "https://chatgpt.com/"), " · ",
-      link("Gemini", "https://gemini.google.com/app"));
-    note.hidden = false;
+    const copying = copyTextNow(t);           // start copying inside the tap
     const pics = getPictures ? getPictures() : [];
+    let picsFile = null;                       // prepared ahead, so Share can attach it straight away
+    const picsReady = pics.length && canShare ? picturesBlob(pics).then(b => { picsFile = new File([b], "question-pictures.png", { type:"image/png" }); }).catch(() => {}) : null;
+    const enc = encodeURIComponent(t), short = enc.length < 7000;
+    const link = (name, url) => h("a", { href: url, target:"_blank", rel:"noopener noreferrer" }, name);
+    const links = [link("Claude", short ? "https://claude.ai/new?q=" + enc : "https://claude.ai/new"), " · ",
+      link("ChatGPT", short ? "https://chatgpt.com/?q=" + enc : "https://chatgpt.com/"), " · ", link("Gemini", "https://gemini.google.com/app")];
+    const shareBtn = canShare ? h("button", { class:"btn small", type:"button", onclick: async ev => {
+      ev.stopPropagation();
+      const data = { title: "Question", text: t };
+      if (picsFile && navigator.canShare && navigator.canShare({ files:[picsFile] })) data.files = [picsFile];
+      try { await navigator.share(data); }
+      catch(err){ if (err && err.name !== "AbortError"){ try { await navigator.share({ title:"Question", text:t }); } catch(e3){} } }
+    } }, "Share to app") : null;
+    note.replaceChildren("Preparing…"); note.hidden = false;
+    copying.then(ok => {
+      if (ok){
+        note.replaceChildren(...["Copied. ", shareBtn ? [shareBtn, " or paste it into an AI chat, or open: "] : "Paste it into any AI chat, or open: ", links].flat(Infinity).filter(Boolean));
+        manual.hidden = true;
+      } else {
+        const ta = h("textarea", { class:"aitext", readonly:true, "aria-label":"Prompt to copy" }); ta.value = t;
+        manual.replaceChildren(h("div", { class:"small muted" }, "This browser blocked copying. Tap “Select all”, then Copy, or use Share to app."),
+          ta, h("div", { class:"row", style:"margin-top:.3rem" },
+            h("button", { class:"btn small", type:"button", onclick: ev => { ev.stopPropagation(); ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); } }, "Select all"), shareBtn));
+        manual.hidden = false;
+        note.replaceChildren(...["Open: ", links].flat(Infinity));
+      }
+    });
     if (pics.length){
       const picNote = h("span", { class:"small muted" });
       picBox.replaceChildren(h("span", null, `This question has ${pics.length} picture${pics.length===1?"":"s"}. Some AI chats (like Gemini) can’t open links, so also `),
-        h("button", { class:"btn small", type:"button", onclick: e => { e.stopPropagation(); copyPictures(pics, picNote); } }, "Copy pictures"),
-        h("span", null, " and paste them in after the text. "), picNote);
+        h("button", { class:"btn small", type:"button", onclick: ev => { ev.stopPropagation(); copyPictures(pics, picNote); } }, "Copy pictures"),
+        h("span", null, canShare ? " (or use Share to app, which sends them along). " : " and paste them in after the text. "), picNote);
       picBox.hidden = false;
+      if (picsReady) picsReady.then(() => { if (!picsFile) picNote.textContent = "Share to app will send the text only; the pictures can’t be combined here."; });
     }
   } }, label || "Ask AI");
-  const note = h("span", { class:"small muted ainote", hidden:true, "aria-live":"polite" });
-  const picBox = h("div", { class:"small muted aipics", hidden:true });
-  wrap.append(btn, note, picBox);
+  wrap.append(btn, note, manual, picBox);
   return wrap;
 }
 
