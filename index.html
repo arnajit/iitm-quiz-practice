@@ -1438,13 +1438,16 @@ function loadState_(ss) {
 
 function viewSheet(){
   const c = sheet.cfg;
-  if (!c.token) { c.token = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, "0")).join(""); sheet.saveCfg(); }
   const root = h("div", { class:"stack" }, h("h1", null, "Google Sheet"));
   if (sheet.on){
     root.append(h("div", { class:"panel stack" },
       h("h2", null, "Connected"),
       h("p", { class:"small muted", style:"margin:0" }, c.sheetName ? `Sheet: ${c.sheetName}. ` : "", c.lastBackup ? `Last backup ${fmtDate(c.lastBackup)}.` : "Not backed up yet."),
       c.lastError ? h("p", { class:"status err", style:"margin:0" }, "Last problem: " + c.lastError) : null,
+      h("details", null, h("summary", { class:"small" }, "Connect another device"),
+        h("p", { class:"small muted" }, "On the other device, open Drill → Sheet and enter these two:"),
+        h("div", { class:"small" }, h("strong", null, "Web app URL: "), h("span", { class:"fig-src" }, c.url)),
+        h("div", { class:"small" }, h("strong", null, "Your key: "), h("span", { class:"fig-src" }, c.token))),
       sheet.queue().length ? h("p", { class:"small muted", style:"margin:0" }, `${sheet.queue().length} session${sheet.queue().length===1?"":"s"} waiting to be sent.`) : null,
       h("label", { class:"check" }, h("input", { type:"checkbox", checked: c.auto !== false, onchange:e=>{ c.auto = e.target.checked; sheet.saveCfg(); } }),
         h("span", null, "Back up automatically", h("br"), h("span", { class:"small muted" }, "After each session and whenever you add or change questions."))),
@@ -1452,33 +1455,35 @@ function viewSheet(){
         h("button", { class:"btn primary", disabled: sheet.busy, onclick:async e=>{ e.target.disabled = true; e.target.textContent = "Backing up…"; await sheet.backup(false); } }, "Back up now"),
         h("button", { class:"btn", onclick:doRestore }, "Get my data from the Sheet"),
         h("span", { class:"spacer" }),
-        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Disconnect from the Sheet? Nothing is deleted from it.")){ sheet.cfg = { token: c.token }; sheet.saveCfg(); sheet.status = ""; render(); } } }, "Disconnect")),
+        h("button", { class:"btn ghost danger small", onclick:()=>{ if (confirm("Disconnect from the Sheet? Nothing is deleted from it.")){ sheet.cfg = { pendingUrl: c.url, pendingKey: c.token }; sheet.saveCfg(); sheet.status = ""; render(); } } }, "Disconnect")),
       h("p", { class:"status" + (/couldn|refused|doesn|answered|no backup|unexpected|failed/i.test(sheet.status) ? " err" : "") }, sheet.status)));
     root.append(h("p", { class:"small muted" }, "The Sheet gets three tabs: Sessions (one row per session), Answers (one row per question you answered) and Questions (every question with its key). Figures you pasted stay in this browser; use Export backup for those."));
     return root;
   }
+  const KEY_OK = /^[A-Za-z0-9_-]{8,64}$/;
   const urlIn = h("input", { type:"text", value: c.pendingUrl || "", placeholder:"https://script.google.com/macros/s/…/exec", "aria-label":"Web app URL", oninput:e=>{ c.pendingUrl = e.target.value.trim(); } });
-  const code = sheetScript(c.token);
+  const pre = h("pre", { class:"code" });
+  const refreshCode = () => { pre.textContent = sheetScript(KEY_OK.test(c.pendingKey || "") ? c.pendingKey : "PUT-YOUR-KEY-HERE"); };
+  const keyIn = h("input", { type:"text", value: c.pendingKey || "", placeholder:"e.g. arnajit-drill-2026", spellcheck:"false", autocomplete:"off", "aria-label":"Your key",
+    style:"font-family:ui-monospace,Menlo,Consolas,monospace", oninput:e=>{ c.pendingKey = e.target.value.trim().replace(/^['"]|['"]$/g, ""); refreshCode(); } });
+  refreshCode();
   root.append(
-    h("p", { class:"muted" }, "Connect a Google Sheet of your own to keep a log of every session and a backup of all your subjects. It takes about five minutes, once."),
+    h("p", { class:"muted" }, "Keep a log of every session and a backup of all your subjects in a Google Sheet of your own. Use the same URL and key on every device."),
     h("div", { class:"panel stack" },
-      h("h2", null, "Set it up"),
-      h("ol", { class:"steps" },
-        h("li", null, "Create a new Google Sheet (sheets.new), named e.g. “Drill”."),
-        h("li", null, "In the Sheet: Extensions → Apps Script. Delete what’s there and paste the script below. Save."),
-        h("li", null, "Deploy → New deployment → gear icon → Web app. Set “Execute as” to Me and “Who has access” to Anyone. Click Deploy and allow access when Google asks."),
-        h("li", null, "Copy the Web app URL (ends in /exec) and paste it here.")),
-      h("div", { class:"row" }, h("button", { class:"btn", onclick:e=>{ navigator.clipboard.writeText(code).then(()=>{ e.target.textContent = "Script copied"; }).catch(()=>{ e.target.textContent = "Select the text below and copy it"; }); } }, "Copy script"),
-        h("span", { class:"small muted" }, "It already contains your private key.")),
-      h("details", null, h("summary", { class:"small" }, "Show the script"), h("pre", { class:"code" }, code)),
+      h("h2", null, "Connect"),
       h("label", { class:"field" }, h("span", null, "Web app URL"), urlIn),
+      h("label", { class:"field" }, h("span", null, "Your key"), keyIn),
+      h("p", { class:"small muted", style:"margin:0" }, "A password you choose, 8 or more letters, numbers, - or _. It must match the KEY line in your Apps Script."),
       h("div", { class:"row" }, h("button", { class:"btn primary", onclick:async e=>{
         const u = (c.pendingUrl || "").trim();
         if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/i.test(u)){ sheet.status = "That doesn’t look like an Apps Script web app URL. It should start with https://script.google.com/macros/s/ and end in /exec."; render(); return; }
+        const k = (c.pendingKey || "").trim();
+        if (!KEY_OK.test(k)){ sheet.status = "Type your key: 8 or more letters, numbers, - or _, with no spaces."; render(); return; }
+        c.token = k; sheet.saveCfg();
         e.target.disabled = true; e.target.textContent = "Connecting…";
         c.url = u;
         try {
-          const j = await sheet.call({ action:"ping" }); c.sheetName = j.name; c.auto = true; delete c.pendingUrl; sheet.saveCfg();
+          const j = await sheet.call({ action:"ping" }); c.sheetName = j.name; c.auto = true; delete c.pendingUrl; delete c.pendingKey; sheet.saveCfg();
           sheet.status = "Connected. Checking the Sheet for your data…"; render();
           let remote = null; try { remote = await sheet.restore(); } catch(err){}
           let msg = "Connected.";
@@ -1486,10 +1491,22 @@ function viewSheet(){
           const ok = await sheet.backup(true);
           sheet.status = msg + (ok ? " Backed up." : ""); render();
         }
-        catch(err){ c.url = ""; sheet.saveCfg(); sheet.status = "Couldn’t connect: " + (err.message === "Failed to fetch" ? "the request was blocked. Check the URL, that access is set to Anyone, and that you’re using drill.html opened directly in Chrome." : err.message); render(); }
+        catch(err){ c.url = ""; sheet.saveCfg(); sheet.status = "Couldn’t connect: " + (err.message === "Failed to fetch" ? "the request was blocked. Check it’s the /exec URL and that the deployment’s access is set to Anyone." : err.message === "The key doesn’t match the one in the script." ? "this key doesn’t match the KEY line in your Apps Script. Check both are exactly the same. If you changed the script, deploy a new version (Deploy → Manage deployments → pencil → New version)." : err.message); render(); }
       } }, "Connect")),
-      h("p", { class:"status err" }, sheet.status)));
-  return root;
+      h("p", { class:"status err" }, sheet.status)),
+    h("details", { class:"panel" },
+      h("summary", null, h("strong", null, "First time? Set up the Sheet")),
+      h("ol", { class:"steps", style:"margin-top:.8rem" },
+        h("li", null, "Type your key in “Your key” above. The script below picks it up."),
+        h("li", null, "Create a Google Sheet with a personal Gmail account (sheets.new)."),
+        h("li", null, "In the Sheet: Extensions → Apps Script. Delete what’s there, paste the script, and save."),
+        h("li", null, "Deploy → New deployment → gear icon → Web app. Execute as: Me. Who has access: Anyone. Deploy, and allow access when Google asks."),
+        h("li", null, "Copy the Web app URL (ends in /exec) into the box above and click Connect.")),
+      h("div", { class:"row", style:"margin:.6rem 0" }, h("button", { class:"btn", onclick:e=>{
+          if (!KEY_OK.test(c.pendingKey || "")){ e.target.textContent = "Type your key above first"; return; }
+          navigator.clipboard.writeText(pre.textContent).then(()=>{ e.target.textContent = "Script copied"; }).catch(()=>{ e.target.textContent = "Select the text below and copy it"; }); } }, "Copy script"),
+        h("span", { class:"small muted" }, "Changing the key later? Edit the KEY line, save, then Deploy → Manage deployments → New version.")),
+      pre));  return root;
 }
 function mergeState(remote){
   // union of both sides; nothing on either side is lost
